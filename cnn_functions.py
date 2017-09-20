@@ -55,10 +55,15 @@ import tensorflow.contrib.keras.api.keras.initializers as initializers
 import tensorflow.contrib.keras.api.keras.losses as losses
 import tensorflow.contrib.keras.api.keras.regularizers as regularizers
 import tensorflow.contrib.keras.api.keras.constraints as constraints
+from tensorflow.contrib.keras.python.keras.utils import conv_utils
+
 
 """
 Helper functions
 """
+
+def axis_softmax(x, axis = 1):
+	return activations.softmax(x, axis = axis)
 
 def rotate_array_0(arr):
 	return arr
@@ -76,6 +81,46 @@ def rotate_array_270(arr):
 	axes_order = range(arr.ndim-2) + [arr.ndim-1, arr.ndim-2]
 	slices = [slice(None) for _ in range(arr.ndim-2)] + [slice(None,None,-1), slice(None)]
 	return arr[tuple(slices)].transpose(axes_order)
+
+def to_categorical(y, num_classes=None):
+	"""Converts a class vector (integers) to binary class matrix.
+	E.g. for use with categorical_crossentropy.
+	# Arguments
+		y: class vector to be converted into a matrix
+		(integers from 0 to num_classes).
+		num_classes: total number of classes.
+	# Returns
+		A binary matrix representation of the input.
+	"""
+	y = np.array(y, dtype='int').ravel()
+	if not num_classes:
+		num_classes = np.max(y) + 1
+	n = y.shape[0]
+	categorical = np.zeros((n, num_classes))
+	categorical[np.arange(n), y] = 1
+	return categorical
+
+
+def normalize(x, axis=-1, order=2):
+	"""Normalizes a Numpy array.
+	# Arguments
+		x: Numpy array to normalize.
+		axis: axis along which to normalize.
+		order: Normalization order (e.g. 2 for L2 norm).
+	# Returns
+		A normalized copy of the array.
+	"""
+	l2 = np.atleast_1d(np.linalg.norm(x, order, axis))
+	l2[l2 == 0] = 1
+	return x / np.expand_dims(l2, axis)
+
+def get_image_sizes(data_location, channel_names):
+	img_list_channels = []
+	for channel in channel_names:
+		img_list_channels += [nikon_getfiles(data_location, channel)]
+	img_temp = get_image(os.path.join(data_location, img_list_channels[0][0]))
+
+	return img_temp.shape
 
 def rate_scheduler(lr = .001, decay = 0.95):
 	def output_fn(epoch):
@@ -240,6 +285,7 @@ class ImageSampleArrayIterator(Iterator):
 		super(ImageSampleArrayIterator, self).__init__(len(train_dict["labels"]), batch_size, shuffle, seed)
 
 	def _get_batches_of_transformed_samples(self, index_array):
+		index_array = index_array[0]
 		if self.channels_axis ==1:
 			batch_x = np.zeros(tuple([len(index_array)] + [self.x.shape[1]] + [2*self.win_x + 1, 2*self.win_y + 1]))
 		else:
@@ -251,9 +297,13 @@ class ImageSampleArrayIterator(Iterator):
 			pixel_y = self.pixels_y[j]
 			win_x = self.win_x
 			win_y = self.win_y
-			x = self.x[batch,:,pixel_x-win_x:pixel_x+win_x_1, pixel_y-win_y, pixel_y+win_y+1]
+
+			x = self.x[batch,:,pixel_x-win_x:pixel_x+win_x+1, pixel_y-win_y:pixel_y+win_y+1]
 			x = self.image_data_generator.random_transform(x.astype(K.floatx()))
 			x = self.image_data_generator.standardize(x)
+
+			# print batch_x.shape
+			# print x.shape
 
 			if self.channels_axis == 1:
 				batch_x[i] = x
@@ -292,22 +342,22 @@ class SampleDataGenerator(ImageDataGenerator):
 		return ImageSampleArrayIterator(
 			train_dict, self,
 			batch_size=batch_size, shuffle=shuffle, seed=seed,
-			dim_ordering=self.dim_ordering,
+			data_format=self.data_format,
 			save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
 
 """
 Custom layers
 """
 
-class dilated_MaxPooling2D(Layer):
+class dilated_MaxPool2D(Layer):
 	def __init__(self, pool_size=(2, 2), strides=None, dilation_rate = 1, padding='valid',
 				data_format=None, **kwargs):
-		super(dilated_MaxPooling2D, self).__init__(**kwargs)
+		super(dilated_MaxPool2D, self).__init__(**kwargs)
 		data_format = conv_utils.normalize_data_format(data_format)
 		if dilation_rate != 1:
 			strides = (1,1)
 		elif strides is None:
-			strides = pool_size
+			strides = (1,1)
 		self.pool_size = conv_utils.normalize_tuple(pool_size, 2, 'pool_size')
 		self.strides = conv_utils.normalize_tuple(strides, 2, 'strides')
 		self.dilation_rate = dilation_rate
@@ -332,7 +382,7 @@ class dilated_MaxPooling2D(Layer):
 			return (input_shape[0], rows, cols, input_shape[3])
 
 	def  _pooling_function(self, inputs, pool_size, dilation_rate, strides, padding, data_format):
-		backend = os.environ["KERAS_BACKEND"]
+		backend = K.backend()
 		
 		#dilated pooling for tensorflow backend
 		if backend == "theano":
@@ -362,10 +412,10 @@ class dilated_MaxPooling2D(Layer):
 					'dilation_rate': self.dilation_rate,
 					'strides': self.strides,
 					'data_format': self.data_format}
-		base_config = super(dilated_MaxPooling2D, self).get_config()
+		base_config = super(dilated_MaxPool2D, self).get_config()
 		return dict(list(base_config.items()) + list(config.items()))
 
-class TensorProdLayer2D(Layer):
+class TensorProd2D(Layer):
 	def __init__(self,
 					input_dim,
 					output_dim,
@@ -380,7 +430,7 @@ class TensorProdLayer2D(Layer):
 					kernel_constraint=None,
 					bias_constraint=None,
 					**kwargs):
-		super(TensorProdLayer2D, self).__init__(**kwargs)
+		super(TensorProd2D, self).__init__(**kwargs)
 		self.input_dim = input_dim
 		self.output_dim = output_dim
 		self.data_format = conv_utils.normalize_data_format(data_format)
@@ -393,7 +443,7 @@ class TensorProdLayer2D(Layer):
 		self.activity_regularizer = regularizers.get(activity_regularizer)
 		self.kernel_constraint = constraints.get(kernel_constraint)
 		self.bias_constraint = constraints.get(bias_constraint)
-		self.input_spec = InputSpec(ndim=4)
+		self.input_spec = InputSpec(min_ndim=2)
 
 	def build(self, input_shape):
 		if self.data_format == 'channels_first':
@@ -403,15 +453,14 @@ class TensorProdLayer2D(Layer):
 		if input_shape[channel_axis] is None:
 			raise ValueError('The channel dimension of the inputs should be defined. Found None')
 		input_dim = input_shape[channel_axis]
-		kernel_shape = self.kernel_size + (input_dim, self.filters)
 
-		self.kernel = self.add_weight(shape = (self.input_dim, self.output_dim),
+		self.kernel = self.add_weight(shape = (input_dim, self.output_dim),
 										initializer = self.kernel_initializer,
 										name = 'kernel',
 										regularizer = self.kernel_regularizer,
 										constraint = self.kernel_constraint)
 		if self.use_bias:
-			self.bias = self.add_weight(shape=(self.filters,),
+			self.bias = self.add_weight(shape=(self.output_dim,),
 										initializer=self.bias_initializer,
 										name='bias',
 										regularizer=self.bias_regularizer,
@@ -420,25 +469,31 @@ class TensorProdLayer2D(Layer):
 			self.bias = None
 
 		# Set input spec.
-		self.input_spec = InputSpec(ndim=4,
+		self.input_spec = InputSpec(min_ndim=2,
 									axes={channel_axis: input_dim})
 		self.built = True
 
 	def call(self, inputs):
-		backend = os.environ["KERAS_BACKEND"]
+		backend = K.backend()
 
 		if backend == "theano":
 			Exception('This version of DeepCell only works with the tensorflow backend')
 
 		if self.data_format == 'channels_first':
-			output = tf.tensordot(inputs, self.kernel, axes = [1,0])
+			output = tf.tensordot(inputs, self.kernel, axes = [[1], [0]])
 			output = tf.transpose(output, perm = [0, 3, 1, 2])
+			# output = K.dot(inputs, self.kernel)
 
 		elif self.data_format == 'channels_last':
-			output = tf.tensordot(inputs, self.kernel, axes = [3, 0])
+			output = tf.tensordot(inputs, self.kernel, axes = [[3], [0]])
 
-		if use_bias:
+		if self.use_bias:
 			output = K.bias_add(output, self.bias, data_format = self.data_format)
+
+		if self.activation is not None:
+			return self.activation(output)
+
+		return output
 
 	def compute_output_shape(self, input_shape):
 		rows = input_shape[2]
@@ -459,14 +514,14 @@ class TensorProdLayer2D(Layer):
 			'activation': self.activation,
 			'use_bias': self.use_bias,
 			'kernel_initializer': initializers.serialize(self.kernel_initializer),
-			'bias_initializer': iniitializers.serialize(self.bias_initializer),
+			'bias_initializer': initializers.serialize(self.bias_initializer),
 			'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
 			'bias_regularizer': regularizers.serialize(self.bias_regularizer),
 			'activity_regularizer': regularizers.serialize(self.activity_regularizer),
 			'kernel_constraint': constraints.serialize(self.kernel_constraint),
 			'bias_constraint': constraints.serialize(self.bias_constraint)		
 		}
-		base_config = super(TensorProdLayer2D,self).get_config
+		base_config = super(TensorProd2D,self).get_config()
 		return dict(list(base_config.items()) + list(config.items()))
 
 """
@@ -478,7 +533,7 @@ def train_model_sample(model = None, dataset = None,  optimizer = None,
 	direc_save = "/home/vanvalen/ImageAnalysis/DeepCell2/trained_networks/", 
 	direc_data = "/home/vanvalen/ImageAnalysis/DeepCell2/training_data_npz/", 
 	lr_sched = rate_scheduler(lr = 0.01, decay = 0.95),
-	rotate = True, flip = True, shear = 0, class_weight = None):
+	rotation_range = 0, flip = True, shear = 0, class_weight = None):
 
 	training_data_file_name = os.path.join(direc_data, dataset + ".npz")
 	todays_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -496,11 +551,13 @@ def train_model_sample(model = None, dataset = None,  optimizer = None,
 
 	# determine the number of classes
 	output_shape = model.layers[-1].output_shape
-	n_classes = output_shape[-1]
+	n_classes = output_shape[1]
+
+	print output_shape, n_classes
 
 	# convert class vectors to binary class matrices
-	train_dict["labels"] = np_utils.to_categorical(train_dict["labels"], n_classes)
-	Y_test = np_utils.to_categorical(Y_test, n_classes)
+	train_dict["labels"] = to_categorical(train_dict["labels"], n_classes)
+	Y_test = to_categorical(Y_test, n_classes)
 
 	model.compile(loss='categorical_crossentropy',
 				  optimizer=optimizer,
@@ -509,20 +566,120 @@ def train_model_sample(model = None, dataset = None,  optimizer = None,
 	print('Using real-time data augmentation.')
 
 	# this will do preprocessing and realtime data augmentation
-	datagen = ImageDataGenerator(
-		rotate = rotate,  # randomly rotate images by 90 degrees
+	datagen = SampleDataGenerator(
+		rotation_range = rotation_range,  # randomly rotate images by 0 to rotation_range degrees
 		shear_range = shear, # randomly shear images in the range (radians , -shear_range to shear_range)
 		horizontal_flip= flip,  # randomly flip images
 		vertical_flip= flip)  # randomly flip images
 
 	# fit the model on the batches generated by datagen.flow()
-	loss_history = model.fit_generator(datagen.sample_flow(train_dict, batch_size=batch_size),
-						samples_per_epoch=len(train_dict["labels"]),
-						nb_epoch=n_epoch,
-						validation_data=(X_test, Y_test),
+	loss_history = model.fit_generator(datagen.sample_flow(train_dict, batch_size = batch_size),
+						steps_per_epoch = len(train_dict["labels"])/batch_size,
+						epochs = n_epoch,
+						validation_data = (X_test, Y_test),
+						validation_steps = X_test.shape[0]/batch_size,
 						class_weight = class_weight,
 						callbacks = [ModelCheckpoint(file_name_save, monitor = 'val_loss', verbose = 0, save_best_only = True, mode = 'auto'),
 							LearningRateScheduler(lr_sched)])
 
 	np.savez(file_name_save_loss, loss_history = loss_history.history)
 
+"""
+Running convnets
+"""
+
+def run_model(image, model, win_x = 30, win_y = 30, std = False, split = True, process = True):
+	if process:
+		for j in xrange(image.shape[1]):
+			image[0,j,:,:] = process_image(image[0,j,:,:], win_x, win_y, std)
+
+	if split:
+		image_size_x = image.shape[2]/2
+		image_size_y = image.shape[3]/2
+	else:
+		image_size_x = image.shape[2]
+		image_size_y = image.shape[3]
+
+	evaluate_model = K.function(
+		[model.layers[0].input, K.learning_phase()],
+		[model.layers[-1].output]
+		) 
+
+	n_features = model.layers[-1].output_shape[1]
+
+	if split:
+		model_output = np.zeros((n_features,2*image_size_x-win_x*2, 2*image_size_y-win_y*2), dtype = 'float32')
+
+		img_0 = image[:,:, 0:image_size_x+win_x, 0:image_size_y+win_y]
+		img_1 = image[:,:, 0:image_size_x+win_x, image_size_y-win_y:]
+		img_2 = image[:,:, image_size_x-win_x:, 0:image_size_y+win_y]
+		img_3 = image[:,:, image_size_x-win_x:, image_size_y-win_y:]
+
+		model_output[:, 0:image_size_x-win_x, 0:image_size_y-win_y] = evaluate_model([img_0, 0])[0]
+		model_output[:, 0:image_size_x-win_x, image_size_y-win_y:] = evaluate_model([img_1, 0])[0]
+		model_output[:, image_size_x-win_x:, 0:image_size_y-win_y] = evaluate_model([img_2, 0])[0]
+		model_output[:, image_size_x-win_x:, image_size_y-win_y:] = evaluate_model([img_3, 0])[0]
+
+	else:
+		model_output = evaluate_model([image,0])[0]
+		model_output = model_output[0,:,:,:]
+		
+	model_output = np.pad(model_output, pad_width = [(0,0), (win_x, win_x),(win_y,win_y)], mode = 'constant', constant_values = [(0,0), (0,0), (0,0)])
+	return model_output
+
+def run_model_on_directory(data_location, channel_names, output_location, model, win_x = 30, win_y = 30, std = False, split = True, process = True, save = True):
+	
+	n_features = model.layers[-1].output_shape[1]
+	counter = 0
+
+	image_list = get_images_from_directory(data_location, channel_names)
+	processed_image_list = []
+
+	for image in image_list:
+		print "Processing image " + str(counter + 1) + " of " + str(len(image_list))
+		processed_image = run_model(image, model, win_x = win_x, win_y = win_y, std = std, split = split, process = process)
+		processed_image_list += [processed_image]
+
+		# Save images
+		if save:
+			for feat in xrange(n_features):
+				feature = processed_image[feat,:,:]
+				cnnout_name = os.path.join(output_location, 'feature_' + str(feat) +"_frame_"+ str(counter) + r'.tif')
+				tiff.imsave(cnnout_name,feature)
+		counter += 1
+
+	return processed_image_list
+
+def run_models_on_directory(data_location, channel_names, output_location, model_fn, list_of_weights, n_features = 3, image_size_x = 1080, image_size_y = 1280, win_x = 30, win_y = 30, std = False, split = True, process = True, save = True):
+	
+	if split:
+		input_shape = (len(channel_names),image_size_x+win_x, image_size_y+win_y)
+	else:
+		input_shape = (len(channel_names), image_size_x, image_size_y)
+
+	model = model_fn(input_shape = input_shape, n_features = n_features, weights_path = list_of_weights[0])
+	n_features = model.layers[-1].output_shape[1]
+
+	model_outputs = []
+	for weights_path in list_of_weights:
+		model.load_weights(weights_path, by_name = True) 
+		processed_image_list= run_model_on_directory(data_location, channel_names, output_location, model, win_x = win_x, win_y = win_y, save = False, std = std, split = split, process = process)
+		model_outputs += [np.stack(processed_image_list, axis = 0)]
+
+	# Average all images
+	model_output = np.stack(model_outputs, axis = 0)
+	model_output = np.mean(model_output, axis = 0)
+		
+	# Save images
+	if save:
+		for img in xrange(model_output.shape[0]):
+			for feat in xrange(n_features):
+				feature = model_output[img,feat,:,:]
+				cnnout_name = os.path.join(output_location, 'feature_' + str(feat) + "_frame_" + str(img) + r'.tif')
+				tiff.imsave(cnnout_name,feature)
+
+	# from keras.backend.common import _UID_PREFIXES
+	# for key in _UID_PREFIXES:
+	# 	_UID_PREFIXES[key] = 0
+
+	return model_output
