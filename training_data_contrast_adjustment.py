@@ -1,5 +1,9 @@
 """
+training_data_contrast_adjustment.py
+
 Code for adjusting the contrast of images to aid image annotaters
+
+@author: David Van Valen
 """
 
 """

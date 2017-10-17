@@ -1,5 +1,9 @@
 """
-Code for creating csv files with links to the google bucket containing the training data
+save_image_urls.py
+
+Code for creating csv files with links to the google or amazon aws bucket containing the training data
+
+@author: David Van Valen
 """
 
 """
@@ -19,7 +23,8 @@ horizontal_quadrant = []
 vertical_quadrant = []
 
 for j in xrange(45):
-	base_direc = 'https://storage.googleapis.com/daves-new-bucket/HeLa/ContrastAdjustedImages/'
+	# base_direc = 'https://storage.googleapis.com/daves-new-bucket/HeLa/ContrastAdjustedImages/'
+	base_direc = 'https://s3-us-west-1.amazonaws.com/daves-amazons3-bucket/'
 	for i in xrange(2):
 		for k in xrange(2):
 			file_name = 'nuclear_' + str(j) + '_quad_' + str(i) + '_' + str(k) + '.png'

@@ -1,8 +1,12 @@
-'''Run a simple deep CNN on images.
-GPU run command:
-	THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python running_template.py
+"""
+running_template.py
+Run a trained CNN on a dataset.
 
-'''
+Run command:
+	python training_template.py
+
+@author: David Van Valen
+"""
 
 import h5py
 import tifffile as tiff
@@ -19,25 +23,25 @@ import numpy as np
 """
 Load data
 """
-direc_name = '/home/vanvalen/Data/RAW_40X_tube/Pos33'
-data_location = os.path.join(direc_name, 'RawImagesReduced')
+direc_name = '/home/vanvalen/Data/MIBI/Point2'
+data_location = os.path.join(direc_name, 'RawImages')
 cyto_location = os.path.join(direc_name, 'Cytoplasm')
 nuclear_location = os.path.join(direc_name, 'Nuclear')
 mask_location = os.path.join(direc_name, 'Masks')
 
-cyto_channel_names = ['channel004', 'channel001']
+cyto_channel_names = ["dsDNA", "H3K9ac", "H3K27me3"]
 nuclear_channel_names = ['channel003']
 
-trained_network_cyto_directory = "/home/vanvalen/DeepCell/trained_networks/RAW40X_tube/"
+trained_network_cyto_directory = "/home/vanvalen/Data/MIBI/trained_networks"
 trained_network_nuclear_directory = "/home/vanvalen/DeepCell/trained_networks/Nuclear/"
 
-cyto_prefix = "2017-09-20_RAW_40X_tube_61x61_bn_feature_net_61x61_"
+cyto_prefix = "2017-10-16_Samir_1e6_61x61_bn_feature_net_61x61_"
 nuclear_prefix = "2016-07-12_nuclei_all_61x61_bn_feature_net_61x61_"
 
 win_cyto = 30
 win_nuclear = 30
 
-image_size_x, image_size_y = get_image_sizes(data_location, nuclear_channel_names)
+image_size_x, image_size_y = get_image_sizes(data_location, cyto_channel_names)
 
 """
 Define model
@@ -61,7 +65,7 @@ Run model on directory
 
 cytoplasm_predictions = run_models_on_directory(data_location, cyto_channel_names, cyto_location, n_features = 3, model_fn = cyto_fn, 
 	list_of_weights = list_of_cyto_weights, image_size_x = image_size_x, image_size_y = image_size_y, 
-	win_x = win_cyto, win_y = win_cyto, std = False, split = False)
+	win_x = win_cyto, win_y = win_cyto, std = True, split = True)
 
 # nuclear_predictions = run_models_on_directory(data_location, nuclear_channel_names, nuclear_location, model_fn = nuclear_fn, 
 # 	list_of_weights = list_of_nuclear_weights, image_size_x = image_size_x, image_size_y = image_size_y, 
