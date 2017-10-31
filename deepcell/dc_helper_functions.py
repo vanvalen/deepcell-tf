@@ -1,5 +1,5 @@
 """
-helper_functions.py
+dc_helper_functions.py
 
 Functions for making training data
 
@@ -155,7 +155,7 @@ def process_image(channel_img, win_x, win_y, std = False, remove_zeros = False):
 		return channel_img
 
 	if remove_zeros:
-		channel_img /= 255
+		channel_img /= np.amax(channel_img)
 		avg_kernel = np.ones((2*win_x + 1, 2*win_y + 1))
 		channel_img -= ndimage.convolve(channel_img, avg_kernel)/avg_kernel.size
 		return channel_img
@@ -269,5 +269,201 @@ def categorical_crossentropy(target, output, class_weights = None, axis = None, 
 	else:
 		return tf.nn.softmax_cross_entropy_with_logits(labels=target,
 					logits=output)
+
+def sample_categorical_crossentropy(target, output, class_weights = None, axis = None, from_logits=False):
+	"""Categorical crossentropy between an output tensor and a target tensor.
+	# Arguments
+		target: A tensor of the same shape as `output`.
+		output: A tensor resulting from a softmax
+		(unless `from_logits` is True, in which
+		case `output` is expected to be the logits).
+		from_logits: Boolean, whether `output` is the
+		result of a softmax, or is a tensor of logits.
+	# Returns
+		Output tensor.
+	"""
+	# Note: tf.nn.softmax_cross_entropy_with_logits
+	# expects logits, Keras expects probabilities.
+	if axis is None:
+		axis = len(output.get_shape()) - 1
+	if not from_logits:
+		# scale preds so that the class probabilities of each sample sum to 1
+		output /= tf.reduce_sum(output,
+					axis=axis,
+					keep_dims=True)
+
+		# Multiply with mask so that only the sampled pixels are used
+		output = tf.multiply(output, target)
+
+		# manual computation of crossentropy
+		_epsilon = _to_tensor(K.epsilon(), output.dtype.base_dtype)
+		output = tf.clip_by_value(output, _epsilon, 1. - _epsilon)
+		if class_weights is None:
+			return - tf.reduce_sum(target * tf.log(output), axis=axis)
+		else:
+			return - tf.reduce_sum(tf.multiply(target * tf.log(output), class_weights), axis=axis)
+
+	else:
+		return tf.nn.softmax_cross_entropy_with_logits(labels=target,
+					logits=output)
+
+def data_generator(channels, batch, feature_dict = None, mode = 'sample', labels = None, pixel_x = None, pixel_y = None, win_x = 30, win_y = 30):
+	if mode == 'sample':
+		img_list = []
+		l_list = []
+		for b, x, y, l in zip(batch, pixel_x, pixel_y, labels):
+			img = channels[b,:, x-win_x:x+win_x+1, y-win_y:y+win_y+1]
+			img_list += [img]
+			l_list += [l]
+		return np.stack(tuple(img_list),axis = 0), np.array(l_list)
+
+	if mode == 'conv' or mode == 'conv_sample':
+		img_list = []
+		l_list = []
+		for b in batch:
+			img_list += [channels[b,:,:,:]]
+			l_list += [labels[b,:,:,:]]
+		img_list = np.stack(tuple(img_list), axis = 0).astype(K.floatx())
+		l_list = np.stack(tuple(l_list), axis = 0)
+		return img_list, l_list
+
+	if mode == 'conv_gather':
+		img_list = []
+		l_list = []
+		batch_list = []
+		row_list = []
+		col_list = []
+		feature_dict_new = {}
+		for b_new, b in enumerate(batch):
+			img_list += [channels[b,:,:,:]]
+			l_list += [labels[b,:,:,:]]
+			batch_list = feature_dict[b][0] - np.amin(feature_dict[b][0])
+			row_list = feature_dict[b][1]
+			col_list = feature_dict[b][2]
+			l_list = feature_dict[b][3]
+			feature_dict_new[b_new] = (batch_list, row_list, col_list, l_list)
+		img_list = np.stack(tuple(img_list), axis = 0).astype(K.floatx())
+
+		return img_list, feature_dict_new
+
+	if mode == 'movie':
+		img_list = []
+		l_list = []
+		for b in batch:
+			img_list += [channels[b,:,:,:,:]]
+			l_list += [labels[b,:,:,:]]
+		img_list = np.stack(tuple(img_list), axis = 0).astype(K.floatx())
+		l_list = np.stack(tuple(l_list), axis = 0)
+		return img_list, l_list
+
+def get_data(file_name, mode = 'sample'):
+	if mode == 'sample':
+		training_data = np.load(file_name)
+		channels = training_data["channels"]
+		batch = training_data["batch"]
+		labels = training_data["y"]
+		pixels_x = training_data["pixels_x"]
+		pixels_y = training_data["pixels_y"]
+		win_x = training_data["win_x"]
+		win_y = training_data["win_y"]
+
+		total_batch_size = len(labels)
+		num_test = np.int32(np.floor(np.float(total_batch_size)/10))
+		num_train = np.int32(total_batch_size - num_test)
+		full_batch_size = np.int32(num_test + num_train)
+
+		"""
+		Split data set into training data and validation data
+		"""
+		arr = np.arange(len(labels))
+		arr_shuff = np.random.permutation(arr)
+
+		train_ind = arr_shuff[0:num_train]
+		test_ind = arr_shuff[num_train:num_train+num_test]
+
+		X_test, y_test = data_generator(channels.astype(K.floatx()), batch[test_ind], pixel_x = pixels_x[test_ind], pixel_y = pixels_y[test_ind], labels = labels[test_ind], win_x = win_x, win_y = win_y)
+		train_dict = {"channels": channels.astype(K.floatx()), "batch": batch[train_ind], "pixels_x": pixels_x[train_ind], "pixels_y": pixels_y[train_ind], "labels": labels[train_ind], "win_x": win_x, "win_y": win_y}
+		
+		return train_dict, (X_test, y_test)
+
+	elif mode == "conv" or mode == "conv_sample":
+		training_data = np.load(file_name)
+		channels = training_data["channels"]
+		labels = training_data["y"]
+		if mode == "conv_sample":
+			labels = training_data["y_sample"]
+		class_weights = training_data["class_weights"]
+		win_x = training_data["win_x"]
+		win_y = training_data["win_y"]
+
+		total_batch_size = channels.shape[0]
+		num_test = np.int32(np.ceil(np.float(total_batch_size)/10))
+		num_train = np.int32(total_batch_size - num_test)
+		full_batch_size = np.int32(num_test + num_train)
+
+		print total_batch_size, num_test, num_train
+
+		"""
+		Split data set into training data and validation data
+		"""
+		arr = np.arange(total_batch_size)
+		arr_shuff = np.random.permutation(arr)
+
+		train_ind = arr_shuff[0:num_train]
+		test_ind = arr_shuff[num_train:]
+
+		train_imgs, train_labels = data_generator(channels, train_ind, labels = labels, mode = mode)
+		test_imgs, test_labels = data_generator(channels, test_ind, labels = labels, mode = mode)
+
+		# test_labels = np.moveaxis(test_labels, 1, 3)
+		train_dict = {"channels": train_imgs, "labels": train_labels, "class_weights": class_weights, "win_x": win_x, "win_y": win_y}
+
+		fig,ax = plt.subplots(labels.shape[0], labels.shape[1] + 1, squeeze = False)
+		max_plotted = labels.shape[0]
+
+		return train_dict, (test_imgs, test_labels)
+
+	elif mode == 'conv_gather':
+		training_data = np.load(file_name)
+		channels = training_data["channels"]
+		labels = training_data["y"]
+		win_x = training_data["win_x"]
+		win_y = training_data["win_y"]
+		feature_dict = training_data["feature_dict"]
+		class_weights = training_data["class_weights"]
+
+		total_batch_size = channels.shape[0]
+		num_test = np.int32(np.ceil(np.float(total_batch_size)/10))
+		num_train = np.int32(total_batch_size - num_test)
+		full_batch_size = np.int32(num_test + num_train)
+
+		print total_batch_size, num_test, num_train
+
+		"""
+		Split data set into training data and validation data
+		"""
+		arr = np.arange(total_batch_size)
+		arr_shuff = np.random.permutation(arr)
+
+		train_ind = arr_shuff[0:num_train]
+		test_ind = arr_shuff[num_train:]
+
+		train_imgs, train_gather_dict = data_generator(channels, train_ind, feature_dict = feature_dict, labels = labels, mode = mode)
+		test_imgs, test_gather_dict = data_generator(channels, test_ind, feature_dict = feature_dict, labels = labels, mode = mode)
+
+
+def transform_matrix_offset_center(matrix, x, y):
+	o_x = float(x) / 2 + 0.5
+	o_y = float(y) / 2 + 0.5
+	offset_matrix = np.array([[1, 0, o_x], [0, 1, o_y], [0, 0, 1]])
+	reset_matrix = np.array([[1, 0, -o_x], [0, 1, -o_y], [0, 0, 1]])
+	transform_matrix = np.dot(np.dot(offset_matrix, matrix), reset_matrix)
+	return transform_matrix
+
+def flip_axis(x, axis):
+	x = np.asarray(x).swapaxes(axis, 0)
+	x = x[::-1, ...]
+	x = x.swapaxes(0, axis)
+	return x
 
 

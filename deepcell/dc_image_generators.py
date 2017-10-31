@@ -1,5 +1,5 @@
 """
-image_generators.py
+dc_image_generators.py
 
 Image generators for training convolutional neural networks
 
@@ -65,121 +65,11 @@ import tensorflow.contrib.keras.api.keras.regularizers as regularizers
 import tensorflow.contrib.keras.api.keras.constraints as constraints
 from tensorflow.contrib.keras.python.keras.utils import conv_utils
 
-from helper_functions import *
+from dc_helper_functions import *
 
 """
 Custom image generators
 """
-
-def data_generator(channels, batch, mode = 'sample', labels = None, pixel_x = None, pixel_y = None, win_x = 30, win_y = 30):
-	if mode == 'sample':
-		img_list = []
-		l_list = []
-		for b, x, y, l in zip(batch, pixel_x, pixel_y, labels):
-			img = channels[b,:, x-win_x:x+win_x+1, y-win_y:y+win_y+1]
-			img_list += [img]
-			l_list += [l]
-		return np.stack(tuple(img_list),axis = 0), np.array(l_list)
-
-	if mode == 'conv':
-		img_list = []
-		l_list = []
-		for b in batch:
-			img_list += [channels[b,:,:,:]]
-			l_list += [labels[b,:,:,:]]
-		img_list = np.stack(tuple(img_list), axis = 0).astype(K.floatx())
-		l_list = np.stack(tuple(l_list), axis = 0)
-		return img_list, l_list
-
-	if mode == 'movie':
-		img_list = []
-		l_list = []
-		for b in batch:
-			img_list += [channels[b,:,:,:,:]]
-			l_list += [labels[b,:,:,:]]
-		img_list = np.stack(tuple(img_list), axis = 0).astype(K.floatx())
-		l_list = np.stack(tuple(l_list), axis = 0)
-		return img_list, l_list
-
-def get_data(file_name, mode = 'sample'):
-	if mode == 'sample':
-		training_data = np.load(file_name)
-		channels = training_data["channels"]
-		batch = training_data["batch"]
-		labels = training_data["y"]
-		pixels_x = training_data["pixels_x"]
-		pixels_y = training_data["pixels_y"]
-		win_x = training_data["win_x"]
-		win_y = training_data["win_y"]
-
-		total_batch_size = len(labels)
-		num_test = np.int32(np.floor(np.float(total_batch_size)/10))
-		num_train = np.int32(total_batch_size - num_test)
-		full_batch_size = np.int32(num_test + num_train)
-
-		"""
-		Split data set into training data and validation data
-		"""
-		arr = np.arange(len(labels))
-		arr_shuff = np.random.permutation(arr)
-
-		train_ind = arr_shuff[0:num_train]
-		test_ind = arr_shuff[num_train:num_train+num_test]
-
-		X_test, y_test = data_generator(channels.astype(K.floatx()), batch[test_ind], pixel_x = pixels_x[test_ind], pixel_y = pixels_y[test_ind], labels = labels[test_ind], win_x = win_x, win_y = win_y)
-		train_dict = {"channels": channels.astype(K.floatx()), "batch": batch[train_ind], "pixels_x": pixels_x[train_ind], "pixels_y": pixels_y[train_ind], "labels": labels[train_ind], "win_x": win_x, "win_y": win_y}
-		
-		return train_dict, (X_test, y_test)
-
-	else:
-		training_data = np.load(file_name)
-		channels = training_data["channels"]
-		labels = training_data["y"]
-		class_weights = training_data["class_weights"]
-		win_x = training_data["win_x"]
-		win_y = training_data["win_y"]
-		batch = training_data["batch"]
-		pixels_x = training_data["pixels_x"]
-		pixels_y = training_data["pixels_y"]
-
-		total_batch_size = channels.shape[0]
-		num_test = np.int32(np.ceil(np.float(total_batch_size)/10))
-		num_train = np.int32(total_batch_size - num_test)
-		full_batch_size = np.int32(num_test + num_train)
-
-		print total_batch_size, num_test, num_train
-
-		"""
-		Split data set into training data and validation data
-		"""
-		arr = np.arange(total_batch_size)
-		arr_shuff = np.random.permutation(arr)
-
-		train_ind = arr_shuff[0:num_train]
-		test_ind = arr_shuff[num_train:]
-
-		train_imgs, train_labels = data_generator(channels, train_ind, labels = labels, mode = mode)
-		test_imgs, test_labels = data_generator(channels, test_ind, labels = labels, mode = mode)
-
-		if mode == 'conv':
-			# test_labels = np.moveaxis(test_labels, 1, 3)
-			train_dict = {"batch": batch, "pixels_x": pixels_x, "pixels_y": pixels_y, "channels": train_imgs, "labels": train_labels, "class_weights": class_weights, "win_x": win_x, "win_y": win_y}
-
-		return train_dict, (test_imgs, test_labels)
-
-def transform_matrix_offset_center(matrix, x, y):
-	o_x = float(x) / 2 + 0.5
-	o_y = float(y) / 2 + 0.5
-	offset_matrix = np.array([[1, 0, o_x], [0, 1, o_y], [0, 0, 1]])
-	reset_matrix = np.array([[1, 0, -o_x], [0, 1, -o_y], [0, 0, 1]])
-	transform_matrix = np.dot(np.dot(offset_matrix, matrix), reset_matrix)
-	return transform_matrix
-
-def flip_axis(x, axis):
-	x = np.asarray(x).swapaxes(axis, 0)
-	x = x[::-1, ...]
-	x = x.swapaxes(0, axis)
-	return x
 
 class ImageSampleArrayIterator(Iterator):
 	def __init__(self, train_dict, image_data_generator,
@@ -281,9 +171,9 @@ class ImageFullyConvIterator(Iterator):
 		self.x = np.asarray(train_dict["channels"], dtype = K.floatx())
 		self.win_x = train_dict["win_x"]
 		self.win_y = train_dict["win_y"]
-		self.batch_index = train_dict["batch"]
-		self.row_index = train_dict["pixels_x"]
-		self.col_index = train_dict["pixels_y"]
+		# self.batch_index = train_dict["batch"]
+		# self.row_index = train_dict["pixels_x"]
+		# self.col_index = train_dict["pixels_y"]
 
 		# expected_label_size = (self.x.shape[0], train_dict["labels"].shape[1], self.x.shape[2]-2*self.win_x, self.x.shape[3] - 2*self.win_y)
 		# if train_dict["labels"] is not None and train_dict["labels"].shape != expected_label_size:

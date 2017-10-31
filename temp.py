@@ -1,4 +1,4 @@
-def sample_label_matrix(label_matrix, window_size_x = 30, window_size_y = 30, sample_mode = "subsample", border_mode = "valid", output_mode = "sample"):
+def sample_label_matrix(feature_mask, window_size_x = 30, window_size_y = 30, sample_mode = "subsample", border_mode = "valid", output_mode = "sample"):
 	# Create a list of the maximum pixels to sample from each freature in each data set. If sample_mode is "subsample",
 	# then this will be set to the number of edge pixels. If not, then it will be set to np.Inf, i.e. sampling
 	# everything.
@@ -49,8 +49,58 @@ def sample_label_matrix(label_matrix, window_size_x = 30, window_size_y = 30, sa
 								feature_label += [k]
 								pixel_counter += 1
 
+		# Randomize
+		non_rand_ind = np.arange(len(feature_rows), dtype = 'int')
+		rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows), replace = False)
+
+		feature_rows = feature_rows[rand_ind]
+		feature_cols = feature_cols[rand_ind]
+		feature_batch = feature_batch[rand_ind]
+		feature_label = feature_label[rand_ind]
+		return feature_rows, feature_cols, feature_batch, feature_label
+
 	if output_mode == "conv":
-	return feature_rows, feature_cols, feature_batch, feature_label
+		feature_dict = {}
+		if border_mode == "valid":
+			feature_mask = feature_mask_trimmed
+
+		for direc in xrange(channels.shape[0]):
+			feature_rows = []
+			feature_cols = []
+			feature_label = []
+			feature_batch = []
+			for k in xrange(num_of_features + 1):
+				max_num_of_pixels = list_of_max_sample_numbers[direc]
+				pixel_counter = 0
+
+				feature_rows_temp, feature_cols_temp = np.where(feature_mask[direc,k,:,:] == 1)
+
+				# Check to make sure the features are actually present
+				if len(feature_rows_temp) > 0:
+					#Randomly permute index vector
+					non_rand_ind = np.arange(len(feature_rows_temp))
+					rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows_temp), replace = False)
+
+					for i in rand_ind:
+						if pixel_counter < max_num_of_pixels:
+							feature_rows += [feature_rows_temp[i]]
+							feature_cols += [feature_cols_temp[i]]
+							feature_batch += [direc]
+							feature_label += [k]
+			
+			# Randomize
+			non_rand_ind = np.arange(len(feature_rows), dtype = 'int')
+			rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows), replace = False)
+
+			feature_rows = feature_rows[rand_ind]
+			feature_cols = feature_cols[rand_ind]
+			feature_batch = feature_batch[rand_ind]
+			feature_label = feature_label[rand_ind]
+
+			feature_dict[direc] = (feature_rows, feature_cols, feature_batch, feature_label)
+		return feature_dict
+
+
 
 def plot_training_data(channels, label_matrix, max_plotted = 5):
 	fig,ax = plt.subplots(label_matrix.shape[0], label_matrix.shape[1], squeeze = False)
@@ -152,10 +202,16 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		feature_mask_trimmed = feature_mask[:,:,window_size_x:-window_size_x,window_size_y:-window_size_y]
 
 		# Sample pixels from the label matrix
-		feature_rows, feature_cols, feature_batch, feature_label = sample_label_matrix(feature_mask, list_of_max_sample_numbers, 
+		if output_mode == "sample":
+			feature_rows, feature_cols, feature_batch, feature_label = sample_label_matrix(feature_mask, list_of_max_sample_numbers, 
 																		sample_mode = sample_mode, border_mode = border_mode,
 																		window_size_x = window_size_x, window_size_y = window_size_y)
 
+		elif output_mode == "conv":
+			feature_dict = sample_label_matrix(feature_mask, list_of_max_sample_numbers, 
+							sample_mode = sample_mode, border_mode = border_mode,
+							window_size_x = window_size_x, window_size_y = window_size_y)
+		
 		if display:
 			plot_training_data(channels, feature_rows)
 
@@ -176,19 +232,12 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 				feature_batch = feature_batch[rand_ind]
 				feature_label = feature_label[rand_ind]
 
-			# Randomize
-			non_rand_ind = np.arange(len(feature_rows), dtype = 'int')
-			rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows), replace = False)
-
-			feature_rows = feature_rows[rand_ind]
-			feature_cols = feature_cols[rand_ind]
-			feature_batch = feature_batch[rand_ind]
-			feature_label = feature_label[rand_ind]
-
 			# Save training data in npz format
 			np.savez(file_name_save, weights = weights, channels = channels, y = feature_label, batch = feature_batch, pixels_x = feature_rows, pixels_y = feature_cols, win_x = window_size_x, win_y = window_size_y)
 
 		if output_mode == "conv":
+			# Save training data in npz format
+			np.savez(file_name_save, weights = weights, channels = channels, y  = feature_mask, feature_dict = feature_dict, win_x = window_size_x, win_y = window_size_y)
 
 
 

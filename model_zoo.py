@@ -14,7 +14,7 @@ from tensorflow.contrib.keras.api.keras.layers import Conv2D, MaxPool2D, AvgPool
 from tensorflow.contrib.keras.api.keras.regularizers import l2
 from tensorflow.contrib.keras.api.keras.callbacks import ModelCheckpoint
 from tensorflow.contrib.keras.api.keras.activations import softmax
-from cnn_functions import dilated_MaxPool2D, TensorProd2D, axis_softmax
+from deepcell import dilated_MaxPool2D, TensorProd2D, axis_softmax
 
 """
 Batch normalized conv-nets
@@ -531,41 +531,57 @@ def dilated_bn_multires_feature_net_61x61(input_shape = (2, 1080, 1280), n_featu
 
 def bn_multires_feature_net(input_shape = (2,1080,1280), n_features = 3, reg = 1e-5, init = 'he_normal', permute = False):
 	input1 = Input(shape = input_shape)
-	conv1 = Conv2D(16, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input1)
+	conv1 = Conv2D(32, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input1)
 	norm1 = BatchNormalization(axis = 1)(conv1)
 	act1 = Activation('relu')(norm1)
 
-	conv2 = Conv2D(16, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act1)
+	conv2 = Conv2D(32, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act1)
 	norm2 = BatchNormalization(axis = 1)(conv2)
 	act2 = Activation('relu')(norm2)
 	
-	conv3 = Conv2D(16, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act2)
+	conv3 = Conv2D(32, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act2)
 	norm3 = BatchNormalization(axis = 1)(conv3)
 	act3 = Activation('relu')(norm3)
 
-	conv4 = Conv2D(16, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act3)
+	conv4 = Conv2D(32, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act3)
 	norm4 = BatchNormalization(axis = 1)(conv4)
 	act4 = Activation('relu')(norm4)
 
-	conv5 = Conv2D(16, (3,3), dilation_rate = 4, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act4)
+	conv5 = Conv2D(32, (3,3), dilation_rate = 4, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act4)
 	norm5 = BatchNormalization(axis = 1)(conv5)
 	act5 = Activation('relu')(norm5)
 
-	conv6 = Conv2D(16, (3,3), dilation_rate = 4, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act5)
+	conv6 = Conv2D(32, (3,3), dilation_rate = 4, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act5)
 	norm6 = BatchNormalization(axis = 1)(conv6)
 	act6 = Activation('relu')(norm6)
 
-	conv7 = Conv2D(16, (3,3), dilation_rate = 8, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act6)
+	conv7 = Conv2D(32, (3,3), dilation_rate = 8, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act6)
 	norm7 = BatchNormalization(axis = 1)(conv7)
 	act7 = Activation('relu')(norm7)
 
-	conv8 = Conv2D(16, (3,3), dilation_rate = 8, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act7)
+	conv8 = Conv2D(32, (3,3), dilation_rate = 8, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act7)
 	norm8 = BatchNormalization(axis = 1)(conv8)
 	act8 = Activation('relu')(norm8)
 
-	merge1 = Concatenate(axis = 1)([act1, act2, act3, act4, act5, act6, act7, act8])
+	conv9 = Conv2D(32, (3,3), dilation_rate = 16, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act8)
+	norm9 = BatchNormalization(axis = 1)(conv9)
+	act9 = Activation('relu')(norm9)
 
-	tensor_prod1 = TensorProd2D(16*8, 128, kernel_initializer = init, kernel_regularizer = l2(reg))(merge1)
+	conv10 = Conv2D(32, (3,3), dilation_rate = 16, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act9)
+	norm10 = BatchNormalization(axis = 1)(conv10)
+	act10 = Activation('relu')(norm10)
+
+	conv11 = Conv2D(32, (3,3), dilation_rate = 32, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act10)
+	norm11 = BatchNormalization(axis = 1)(conv11)
+	act11 = Activation('relu')(norm11)
+
+	conv12 = Conv2D(32, (3,3), dilation_rate = 32, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act11)
+	norm12 = BatchNormalization(axis = 1)(conv12)
+	act12 = Activation('relu')(norm12)
+
+	merge1 = Concatenate(axis = 1)([act1, act2, act3, act4, act5, act6, act7, act8, act9, act10, act11, act12])
+
+	tensor_prod1 = TensorProd2D(32*12, 128, kernel_initializer = init, kernel_regularizer = l2(reg))(merge1)
 	norm9 = BatchNormalization(axis = 1)(tensor_prod1)
 	act9 = Activation('relu')(norm9)
 
@@ -582,6 +598,86 @@ def bn_multires_feature_net(input_shape = (2,1080,1280), n_features = 3, reg = 1
 	model = Model(inputs = input1, outputs = final_layer)
 
 	return model
+
+def bn_multires_pool_feature_net(input_shape = (2,1080,1280), n_features = 3, reg = 1e-5, init = 'he_normal', permute = False):
+	input1 = Input(shape = input_shape)
+	conv1 = Conv2D(32, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input1)
+	norm1 = BatchNormalization(axis = 1)(conv1)
+	act1 = Activation('relu')(norm1)
+
+	conv2 = Conv2D(32, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act1)
+	norm2 = BatchNormalization(axis = 1)(conv2)
+	act2 = Activation('relu')(norm2)
+	pool1 = dilated_MaxPool2D(dilation_rate = 1, pool_size = (3,3), padding = 'same')(act2)
+	
+	conv3 = Conv2D(32, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(pool1)
+	norm3 = BatchNormalization(axis = 1)(conv3)
+	act3 = Activation('relu')(norm3)
+
+	conv4 = Conv2D(32, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act3)
+	norm4 = BatchNormalization(axis = 1)(conv4)
+	act4 = Activation('relu')(norm4)
+	pool2 = dilated_MaxPool2D(dilation_rate = 1, pool_size = (7,7), padding = 'same')(act4)
+
+	conv5 = Conv2D(32, (3,3), dilation_rate = 4, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(pool2)
+	norm5 = BatchNormalization(axis = 1)(conv5)
+	act5 = Activation('relu')(norm5)
+
+	conv6 = Conv2D(32, (3,3), dilation_rate = 4, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act5)
+	norm6 = BatchNormalization(axis = 1)(conv6)
+	act6 = Activation('relu')(norm6)
+	pool3 = dilated_MaxPool2D(dilation_rate = 1, pool_size = (11,11), padding = 'same')(act6)
+
+	conv7 = Conv2D(32, (3,3), dilation_rate = 8, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(pool3)
+	norm7 = BatchNormalization(axis = 1)(conv7)
+	act7 = Activation('relu')(norm7)
+
+	conv8 = Conv2D(32, (3,3), dilation_rate = 8, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act7)
+	norm8 = BatchNormalization(axis = 1)(conv8)
+	act8 = Activation('relu')(norm8)
+	pool4 = dilated_MaxPool2D(dilation_rate = 1, pool_size = (19,19), padding = 'same')(act8)
+
+
+	conv9 = Conv2D(32, (3,3), dilation_rate = 16, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(pool4)
+	norm9 = BatchNormalization(axis = 1)(conv9)
+	act9 = Activation('relu')(norm9)
+
+	conv10 = Conv2D(32, (3,3), dilation_rate = 16, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(norm9)
+	norm10 = BatchNormalization(axis = 1)(conv10)
+	act10 = Activation('relu')(norm10)
+	pool5 = dilated_MaxPool2D(dilation_rate = 1, pool_size = (35,35), padding = 'same')(act10)
+
+
+	conv11 = Conv2D(32, (3,3), dilation_rate = 32, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(pool5)
+	norm11 = BatchNormalization(axis = 1)(conv11)
+	act11 = Activation('relu')(norm11)
+
+	conv12 = Conv2D(32, (3,3), dilation_rate = 32, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(act11)
+	norm12 = BatchNormalization(axis = 1)(conv12)
+	act12 = Activation('relu')(norm12)
+	pool6 = dilated_MaxPool2D(dilation_rate = 1, pool_size = (65,65), padding = 'same')(act12)
+
+
+	merge1 = Concatenate(axis = 1)([pool1, pool2, pool3, pool4, pool5, pool6])
+
+	tensor_prod1 = TensorProd2D(32*6, 128, kernel_initializer = init, kernel_regularizer = l2(reg))(merge1)
+	norm9 = BatchNormalization(axis = 1)(tensor_prod1)
+	act9 = Activation('relu')(norm9)
+
+	tensor_prod2 = TensorProd2D(128, 128, kernel_initializer = init, kernel_regularizer = l2(reg))(act9)
+	norm10 = BatchNormalization(axis = 1)(tensor_prod2)
+	act10 = Activation('relu')(norm10)
+
+	tensor_prod3 = TensorProd2D(128, n_features, kernel_initializer = init, kernel_regularizer = l2(reg))(act10)
+	act11 = Activation(axis_softmax)(tensor_prod3)
+	
+	if permute:
+		final_layer = Permute((2,3,1))(act11)
+
+	model = Model(inputs = input1, outputs = final_layer)
+
+	return model
+
 
 """
 Multiple input conv-nets for fully convolutional training

@@ -28,24 +28,24 @@ import scipy as sp
 from scipy import ndimage
 from skimage import feature
 from sklearn.utils import class_weight
-from cnn_functions import get_image
-from cnn_functions import format_coord as cf
+from deepcell import get_image
+from deepcell import format_coord as cf
 from skimage import morphology as morph
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 
 
-from cnn_functions import make_training_data as make_training_data
+from deepcell import make_training_data as make_training_data
 
 # Define maximum number of training examples
 max_training_examples = 1e6
 window_size = 30
 
 # Load data
-direc_name = '/home/vanvalen/Data/RAW_40X_tube/'
-file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/', 'RAW_40X_tube_conv_61x61.npz')
+direc_name = '/home/vanvalen/Data/RAW_40X_tube/training_data_repeat/'
+file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/', 'RAW_40X_tube_refine_61x61.npz')
 training_direcs = ["set2", "set3", "set4", "set5", "set6"]
-channel_names = ["channel004", "channel001"]
+channel_names = ["feature_0_", "feature_1_"]
 
 # Specify the number of feature masks that are present
 num_of_features = 2
@@ -62,9 +62,10 @@ make_training_data(max_training_examples = max_training_examples, window_size_x 
 		num_of_features = 2,
 		edge_feature = edge_feature,
 		dilation_radius = 2,
-		border_mode = "same",
-		sample_mode = "all",
-		output_mode = "conv",
+		border_mode = "valid",
+		sample_mode = "subsample",
+		output_mode = "sample",
+		process = False,
 		display = True,
 		verbose = True)
 
