@@ -47,6 +47,7 @@ from skimage.filters import threshold_otsu
 import skimage as sk
 from sklearn.utils.linear_assignment_ import linear_assignment
 from sklearn.utils import class_weight
+from scipy.ndimage.filters import uniform_filter
 
 
 import tensorflow as tf
@@ -146,11 +147,17 @@ def rate_scheduler(lr = .001, decay = 0.95):
 		return new_lr
 	return output_fn
 
+def window_stdev(arr, radius, epsilon = 1e-7):
+    c1 = uniform_filter(arr, radius*2+1, mode='constant', origin=-radius)
+    c2 = uniform_filter(arr*arr, radius*2+1, mode='constant', origin=-radius)
+    return ((c2 - c1*c1)**.5) + epsilon
+
 def process_image(channel_img, win_x, win_y, std = False, remove_zeros = False):
 	if std:
 		avg_kernel = np.ones((2*win_x + 1, 2*win_y + 1))
 		channel_img -= ndimage.convolve(channel_img, avg_kernel)/avg_kernel.size
-		std = np.std(channel_img)
+		# std = np.std(channel_img)
+		std = window_stdev(channel_img, win_x)
 		channel_img /= std
 		return channel_img
 

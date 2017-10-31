@@ -13,17 +13,17 @@ from __future__ import print_function
 from tensorflow.contrib.keras.api.keras.optimizers import SGD, RMSprop
 
 from deepcell import rate_scheduler, train_model_sample as train_model
-from model_zoo import bn_feature_net_61x61 as the_model
+from model_zoo import bn_multires_feature_net_61x61 as the_model
 
 import os
 import datetime
 import numpy as np
 
 batch_size = 256
-n_epoch = 5
+n_epoch = 15
 
-dataset = "RAW_40X_tube_refine_61x61"
-expt = "bn_feature_net_61x61"
+dataset = "RAW_40X_tube_61x61"
+expt = "bn_multires_feature_net_61x61"
 
 direc_save = "/home/vanvalen/DeepCell/trained_networks/RAW40X_tube/"
 direc_data = "/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/"
@@ -38,9 +38,9 @@ lr_sched = rate_scheduler(lr = 0.01, decay = 0.95)
 
 class_weights = {0:1, 1:1, 2:1}
 
-for iterate in xrange(3):
+for iterate in xrange(1):
 
-	model = the_model(n_channels = 4, n_features = 3, reg = 1e-5)
+	model = the_model(n_channels = 2, n_features = 3, reg = 1e-5)
 
 	train_model(model = model, dataset = dataset, optimizer = optimizer, 
 		expt = expt, it = iterate, batch_size = batch_size, n_epoch = n_epoch,

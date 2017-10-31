@@ -34,7 +34,6 @@ from skimage import morphology as morph
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 
-
 from deepcell import make_training_data as make_training_data
 
 # Define maximum number of training examples
@@ -42,10 +41,10 @@ max_training_examples = 1e6
 window_size = 30
 
 # Load data
-direc_name = '/home/vanvalen/Data/RAW_40X_tube/training_data_repeat/'
-file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/', 'RAW_40X_tube_refine_61x61.npz')
+direc_name = '/home/vanvalen/Data/RAW_40X_tube/'
+file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/', 'RAW_40X_tube_61x61.npz')
 training_direcs = ["set2", "set3", "set4", "set5", "set6"]
-channel_names = ["feature_0_", "feature_1_"]
+channel_names = ["channel004", "channel001"]
 
 # Specify the number of feature masks that are present
 num_of_features = 2
@@ -59,13 +58,14 @@ make_training_data(max_training_examples = max_training_examples, window_size_x 
 		file_name_save = file_name_save,
 		training_direcs = training_direcs,
 		channel_names = channel_names,
-		num_of_features = 2,
+		num_of_features = num_of_features,
 		edge_feature = edge_feature,
-		dilation_radius = 2,
+		dilation_radius = 0,
 		border_mode = "valid",
 		sample_mode = "subsample",
 		output_mode = "sample",
-		process = False,
+		process = True,
+		process_std = True,
 		display = True,
 		verbose = True)
 

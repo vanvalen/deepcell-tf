@@ -89,9 +89,15 @@ def sample_label_matrix(feature_mask, edge_feature, window_size_x = 30, window_s
 		if sample_mode == "subsample":
 			for k, edge_feat in enumerate(edge_feature):
 				if edge_feat == 1:
-					list_of_max_sample_numbers += [np.sum(feature_mask[j,k,:,:])]
+					if border_mode == "same":
+						list_of_max_sample_numbers += [np.sum(feature_mask[j,k,:,:])]
+					elif border_mode == "valid":
+						list_of_max_sample_numbers += [np.sum(feature_mask_trimmed[j,k,:,:])]
+
 		elif sample_mode == "all":
 			list_of_max_sample_numbers += [np.Inf]
+
+	print list_of_max_sample_numbers
 
 	if output_mode == "sample":
 		for direc in xrange(feature_mask.shape[0]):
@@ -123,19 +129,19 @@ def sample_label_matrix(feature_mask, edge_feature, window_size_x = 30, window_s
 								pixel_counter += 1
 
 		# Randomize
-		non_rand_ind = np.arange(len(feature_rows), dtype = 'int')
-		rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows), replace = False)
-
-
 		feature_rows = np.array(feature_rows,dtype = 'int32')
 		feature_cols = np.array(feature_cols,dtype = 'int32')
 		feature_batch = np.array(feature_batch, dtype = 'int32')
 		feature_label = np.array(feature_label, dtype = 'int32')
 
+		non_rand_ind = np.arange(len(feature_rows), dtype = 'int')
+		rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows), replace = False)
+
 		feature_rows = feature_rows[rand_ind]
 		feature_cols = feature_cols[rand_ind]
 		feature_batch = feature_batch[rand_ind]
 		feature_label = feature_label[rand_ind]
+
 		return feature_rows, feature_cols, feature_batch, feature_label
 
 	if output_mode == "conv":
@@ -292,9 +298,6 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 
 	# Sample pixels from the label matrix
 
-	if border_mode == "valid":
-		feature_mask = feature_mask_trimmed
-
 	if output_mode == "sample":
 		feature_rows, feature_cols, feature_batch, feature_label = sample_label_matrix(feature_mask, edge_feature, output_mode = output_mode,
 																	sample_mode = sample_mode, border_mode = border_mode,
@@ -317,6 +320,7 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		np.savez(file_name_save, weights = weights, channels = channels, y = feature_label, batch = feature_batch, pixels_x = feature_rows, pixels_y = feature_cols, win_x = window_size_x, win_y = window_size_y)
 
 	if output_mode == "conv":
+
 		# Create mask of sampled pixels
 		feature_mask_sample = np.zeros(feature_mask.shape, dtype = 'int32')
 		feature_rows, feature_cols, feature_batch, feature_label = sample_label_matrix(feature_mask, edge_feature, output_mode = "sample",
@@ -327,6 +331,9 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 
 		# Compute weights for each_class
 		weights = class_weight.compute_class_weight('balanced', classes = np.unique(feature_label), y = feature_label)
+
+		if border_mode == "valid":
+			feature_mask = feature_mask_trimmed
 
 		# Save training data in npz format
 		np.savez(file_name_save, class_weights = weights, channels = channels, y  = feature_mask, y_sample = feature_mask_sample, win_x = window_size_x, win_y = window_size_y)

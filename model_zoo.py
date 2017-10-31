@@ -464,63 +464,65 @@ def dilated_bn_multires_feature_net_61x61(input_shape = (2, 1080, 1280), n_featu
 
 	d = 1
 	inputs = Input(shape = input_shape)
-	conv1 = Conv2D(32, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(inputs)
+	conv1 = Conv2D(64, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(inputs)
 	norm1 = BatchNormalization(axis = 1)(conv1)
 	act1 = Activation('relu')(norm1)
 
-	conv2 = Conv2D(32, (4, 4), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(act1)
+	conv2 = Conv2D(64, (4, 4), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(act1)
 	norm2 = BatchNormalization(axis = 1)(conv2)
 	act2 = Activation('relu')(norm2)
 	pool1 = dilated_MaxPool2D(dilation_rate = d, pool_size = (2,2))(act2)
 	d *= 2
 
-	conv3 = Conv2D(32, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool1)
+	conv3 = Conv2D(64, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool1)
 	norm3 = BatchNormalization(axis = 1)(conv3)
 	act3 = Activation('relu')(norm3)
 
-	conv4 = Conv2D(32, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(act3)
+	conv4 = Conv2D(64, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(act3)
 	norm4 = BatchNormalization(axis = 1)(conv4)
 	act4 = Activation('relu')(norm4)
 	pool2 = dilated_MaxPool2D(dilation_rate = d, pool_size = (2,2))(act4)
 	d *= 2
 
-	conv5 = Conv2D(32, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool2)
+	conv5 = Conv2D(64, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool2)
 	norm5 = BatchNormalization(axis = 1)(conv5)
 	act5 = Activation('relu')(norm5)
 
-	conv6 = Conv2D(32, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(act5)
+	conv6 = Conv2D(64, (3, 3), dilation_rate = d, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(act5)
 	norm6 = BatchNormalization(axis = 1)(conv6)
 	act6 = Activation('relu')(norm6)
 	pool3 = dilated_MaxPool2D(dilation_rate = d, pool_size = (2,2))(act6)
 	d *= 2
 
-	side_conv0 = Conv2D(32, (59, 59), dilation_rate = 1, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(conv1)
+	side_conv0 = Conv2D(64, (59, 59), dilation_rate = 1, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(conv1)
 	side_norm0 = BatchNormalization(axis = 1)(side_conv0)
 	side_act0 = Activation('relu')(side_norm0)
 
-	side_conv1 = Conv2D(32, (28, 28), dilation_rate = 2, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool1)
+	side_conv1 = Conv2D(64, (28, 28), dilation_rate = 2, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool1)
 	side_norm1 = BatchNormalization(axis = 1)(side_conv1)
 	side_act1 = Activation('relu')(side_norm1)
 
-	side_conv2 = Conv2D(32, (12, 12), dilation_rate = 4, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool2)
+	side_conv2 = Conv2D(64, (12, 12), dilation_rate = 4, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool2)
 	side_norm2 = BatchNormalization(axis = 1)(side_conv2)
 	side_act2 = Activation('relu')(side_norm2)
 
-	side_conv3 = Conv2D(32, (4, 4), dilation_rate = 8, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool3)
+	side_conv3 = Conv2D(64, (4, 4), dilation_rate = 8, kernel_initializer = init, padding='valid', kernel_regularizer = l2(reg))(pool3)
 	side_norm3 = BatchNormalization(axis = 1)(side_conv3)
 	side_act3 = Activation('relu')(side_norm3)
 
 	merge_layer1 = Concatenate(axis = 1)([side_act1, side_act2, side_act3])
 
-	tensor_prod1 = TensorProd2D(128, 64, kernel_initializer = init, kernel_regularizer = l2(reg))(merge_layer1)
+	tensor_prod1 = TensorProd2D(192, 256, kernel_initializer = init, kernel_regularizer = l2(reg))(merge_layer1)
 	norm7 = BatchNormalization(axis = 1)(tensor_prod1)
 	act7 = Activation('relu')(norm7)
 
-	tensor_prod2 = TensorProd2D(64, n_features, kernel_initializer = init, kernel_regularizer = l2(reg))(act7)
+	tensor_prod2 = TensorProd2D(256, n_features, kernel_initializer = init, kernel_regularizer = l2(reg))(act7)
 	act8 = Activation(axis_softmax)(tensor_prod2)
 	
 	if permute:
 		final_layer = Permute((2,3,1))(act8)
+	else:
+		final_layer = act8
 
 	model = Model(inputs = inputs, outputs = final_layer)
 
