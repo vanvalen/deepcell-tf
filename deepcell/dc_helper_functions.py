@@ -277,8 +277,44 @@ def categorical_crossentropy(target, output, class_weights = None, axis = None, 
 		return tf.nn.softmax_cross_entropy_with_logits(labels=target,
 					logits=output)
 
-def sample_categorical_crossentropy(target, output, class_weights = None, axis = None, from_logits=False):
+def weighted_categorical_crossentropy(target, output, n_classes = 3, axis = None, from_logits=False):
 	"""Categorical crossentropy between an output tensor and a target tensor.
+	Automatically computes the class weights from the target image and uses
+	them to weight the cross entropy
+
+	# Arguments
+		target: A tensor of the same shape as `output`.
+		output: A tensor resulting from a softmax
+		(unless `from_logits` is True, in which
+		case `output` is expected to be the logits).
+		from_logits: Boolean, whether `output` is the
+		result of a softmax, or is a tensor of logits.
+	# Returns
+		Output tensor.
+	"""
+	# Note: tf.nn.softmax_cross_entropy_with_logits
+	# expects logits, Keras expects probabilities.
+	if axis is None:
+		axis = len(output.get_shape()) - 1
+	if not from_logits:
+		# scale preds so that the class probas of each sample sum to 1
+		output /= tf.reduce_sum(output,
+					axis=axis,
+					keep_dims=True)
+		# manual computation of crossentropy
+		_epsilon = _to_tensor(K.epsilon(), output.dtype.base_dtype)
+		output = tf.clip_by_value(output, _epsilon, 1. - _epsilon)
+		target_cast = tf.cast(target, K.floatx())
+		class_weights = 1.0/np.float(n_classes)*tf.divide(tf.reduce_sum(target_cast), tf.reduce_sum(target_cast, axis = [0,1,2]))
+		print class_weights.get_shape()
+		return - tf.reduce_sum(tf.multiply(target * tf.log(output), class_weights), axis=axis)
+
+	else:
+		raise Exception("weighted_categorical_crossentropy cannot take logits")
+
+def sample_categorical_crossentropy(target, output, class_weights = None, axis = None, from_logits=False):
+	"""Categorical crossentropy between an output tensor and a target tensor. Only the sampled 
+	pixels are used to compute the cross entropy
 	# Arguments
 		target: A tensor of the same shape as `output`.
 		output: A tensor resulting from a softmax
@@ -313,6 +349,97 @@ def sample_categorical_crossentropy(target, output, class_weights = None, axis =
 	else:
 		return tf.nn.softmax_cross_entropy_with_logits(labels=target,
 					logits=output)
+
+def dice_coef(y_true, y_pred, smooth = 1):
+	y_true_f = K.flatten(y_true)
+	y_pred_f = K.flatten(y_pred)
+	intersection = K.sum(y_true_f * y_pred_f)
+	return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
+
+def dice_coef_loss(y_true, y_pred, smooth = 1):
+	return -dice_coef(y_true, y_pred, smooth)
+
+def discriminative_instance_loss(y_true, y_pred, delta_v = 0.5, delta_d = 1.5, order = 2, gamma = 1e-3):
+	
+	def temp_norm(ten, axis = -1):
+		return tf.sqrt(tf.constant(1e-4, dtype = K.floatx()) + tf.reduce_sum(tf.square(ten), axis = axis))
+
+	# y_pred = tf.divide(y_pred, tf.expand_dims(tf.norm(y_pred, ord = 2, axis = -1), axis = -1))
+
+	# Compute variance loss
+	cells_summed = tf.tensordot(y_true, y_pred, axes = [[0,1,2],[0,1,2]])
+	n_pixels = tf.cast(tf.count_nonzero(y_true, axis = [0,1,2]), dtype = K.floatx()) + K.epsilon()
+	n_pixels_expand = tf.expand_dims(n_pixels, axis = 1)
+	mu = tf.divide(cells_summed, n_pixels_expand)
+
+	mu_tensor = tf.tensordot(y_true, mu, axes = [[-1], [0]])
+	L_var_1 = y_pred - mu_tensor
+	L_var_2 = tf.square(tf.nn.relu(temp_norm(L_var_1, axis = -1) - tf.constant(delta_v, dtype = K.floatx())))
+	L_var_3 = tf.tensordot(L_var_2, y_true, axes = [[0,1,2],[0,1,2]]) 
+	L_var_4 = tf.divide(L_var_3, n_pixels)
+	L_var = tf.reduce_mean(L_var_4)
+
+	# Compute distance loss
+
+	mu_a = tf.expand_dims(mu, axis = 0)
+	mu_b = tf.expand_dims(mu, axis = 1)
+
+
+	diff_matrix = tf.subtract(mu_a, mu_b)
+	L_dist_1 = temp_norm(diff_matrix, axis = -1)
+	L_dist_2 = tf.square(tf.nn.relu(tf.constant(2*delta_d, dtype = K.floatx()) - L_dist_1))
+	diag = tf.constant(0, shape = [51], dtype = K.floatx())
+	L_dist_3 = tf.matrix_set_diag(L_dist_2, diag)
+	L_dist = tf.reduce_mean(L_dist_3)
+
+	# Compute regularization loss
+	L_reg = gamma * temp_norm(mu, axis = -1)
+	
+	L = L_var + L_dist + L_reg
+
+	# y_pred_square = tf.square(y_pred)
+	# cells_square_summed = tf.tensordot(y_pred_square, y_true, axes = [[0,1,2],[0,1,2]]) + K.epsilon()
+	# mu_square = tf.divide(cells_square_summed, n_pixels)
+
+	# cells_var = mu_square - tf.square(mu)
+	# L_var = tf.reduce_mean(cells_var)
+
+	# num_of_cells = 20 #K.eval(tf.argmax(y_true))
+
+	# cell_locs = []
+	# cells = []
+	# for cell_id in xrange(1, num_of_cells + 1):
+	# 	cell_id_tensor = tf.constant(cell_id, dtype = K.floatx())
+	# 	cell_loc = tf.where(tf.equal(y_true_flatten, cell_id_tensor))
+	# 	cell_locs += [cell_loc] 
+	# 	cells += [tf.gather(y_pred_flatten, cell_loc)]
+
+	# mus = []
+	# for cell in cells:
+	# 	mus += [tf.reduce_mean(cell, axis = 0)]
+
+	# Compute variance loss
+	# L_var_cluster = []
+	# for cell, mu in zip(cells, mus):
+	# 	L_var_cluster += [tf.reduce_mean(tf.square(tf.nn.relu(tf.norm(-1*cell + mu, ord = 2, axis = 1) - delta_v)))]
+
+	# L_var_stack = tf.squeeze(tf.stack(L_var_cluster, axis = 0))
+	# L_var = tf.reduce_mean(L_var_stack, axis = 0)
+
+	# Compute distance loss
+	# L_dist_cluster = []
+	# for i, mua in enumerate(mus):
+	# 	for j, mub in enumerate(mus):
+	# 		if i > j:
+	# 			L_dist_cluster += [tf.square(tf.nn.relu(-tf.norm(mua-mub, ord = 2) + 2*delta_d))]
+	# L_dist_stack = tf.squeeze(tf.stack(L_dist_cluster, axis = 0))
+	# L_dist = tf.reduce_mean(L_dist_stack, axis = 0)
+
+	# Compute regularization loss
+	# L_reg_stack = tf.squeeze(tf.stack(mus, axis = 0))
+	# L_reg = tf.reduce_mean(L_reg_stack, axis = 0)
+
+	return L
 
 def data_generator(channels, batch, feature_dict = None, mode = 'sample', labels = None, pixel_x = None, pixel_y = None, win_x = 30, win_y = 30):
 	if mode == 'sample':
@@ -425,8 +552,8 @@ def get_data(file_name, mode = 'sample'):
 		# test_labels = np.moveaxis(test_labels, 1, 3)
 		train_dict = {"channels": train_imgs, "labels": train_labels, "class_weights": class_weights, "win_x": win_x, "win_y": win_y}
 
-		fig,ax = plt.subplots(labels.shape[0], labels.shape[1] + 1, squeeze = False)
-		max_plotted = labels.shape[0]
+		# fig,ax = plt.subplots(labels.shape[0], labels.shape[1] + 1, squeeze = False)
+		# max_plotted = labels.shape[0]
 
 		return train_dict, (test_imgs, test_labels)
 

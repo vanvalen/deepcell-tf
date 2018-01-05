@@ -97,8 +97,6 @@ def sample_label_matrix(feature_mask, edge_feature, window_size_x = 30, window_s
 		elif sample_mode == "all":
 			list_of_max_sample_numbers += [np.Inf]
 
-	print list_of_max_sample_numbers
-
 	if output_mode == "sample":
 		for direc in xrange(feature_mask.shape[0]):
 			for k in xrange(feature_mask.shape[1]):
@@ -174,7 +172,7 @@ def sample_label_matrix(feature_mask, edge_feature, window_size_x = 30, window_s
 							feature_label += [k]
 							pixel_counter += 1
 
-			
+		
 			# Randomize
 			non_rand_ind = np.arange(len(feature_rows), dtype = 'int')
 			rand_ind = np.random.choice(non_rand_ind, size = len(feature_rows), replace = False)
@@ -192,13 +190,12 @@ def sample_label_matrix(feature_mask, edge_feature, window_size_x = 30, window_s
 			feature_dict[direc] = (feature_rows, feature_cols, feature_batch, feature_label)
 		return feature_dict
 
-
-
 def plot_training_data(channels, feature_mask, max_plotted = 5):
-	fig,ax = plt.subplots(feature_mask.shape[0], feature_mask.shape[1] + 1, squeeze = False)
 	if max_plotted > feature_mask.shape[0]:
 		max_plotted = feature_mask.shape[0]
 	
+	fig,ax = plt.subplots(max_plotted, feature_mask.shape[1] + 1, squeeze = False)
+
 	for j in xrange(max_plotted):
 		ax[j,0].imshow(channels[j,0,:,:],cmap=plt.cm.gray,interpolation='nearest')
 		def form_coord(x,y):
@@ -213,6 +210,36 @@ def plot_training_data(channels, feature_mask, max_plotted = 5):
 			ax[j,k].axes.get_yaxis().set_visible(False)
 	plt.show()
 
+def reshape_matrix(channels, feature_mask, reshaped_size = 256):
+	image_size_x, image_size_y = channels.shape[2:]
+	rep_number = np.int(np.ceil(np.float(image_size_x)/np.float(reshaped_size)))
+	new_batch_size = channels.shape[0] * (rep_number)**2
+
+	new_channels = np.zeros((new_batch_size, channels.shape[1], reshaped_size, reshaped_size), dtype = K.floatx())
+	new_feature_mask = np.zeros((new_batch_size, feature_mask.shape[1], reshaped_size, reshaped_size), dtype = "int32")
+
+	counter = 0
+	for batch in xrange(channels.shape[0]):
+		for i in xrange(rep_number):
+			for j in xrange(rep_number):
+				if i != rep_number - 1 and j != rep_number - 1:
+					new_channels[counter, :, :, :] = channels[batch, :, i*reshaped_size:(i+1)*reshaped_size, j*reshaped_size:(j+1)*reshaped_size]
+					new_feature_mask[counter, :, :, :] = feature_mask[batch, :, i*reshaped_size:(i+1)*reshaped_size, j*reshaped_size:(j+1)*reshaped_size]
+				if i == rep_number - 1 and j != rep_number - 1:
+					new_channels[counter, :, :, :] = channels[batch, :, -reshaped_size:, j*reshaped_size:(j+1)*reshaped_size]
+					new_feature_mask[counter, :, :, :] = feature_mask[batch, :, -reshaped_size:, j*reshaped_size:(j+1)*reshaped_size]
+				if i != rep_number - 1 and j == rep_number - 1:
+					new_channels[counter, :, :, :] = channels[batch, :, i*reshaped_size:(i+1)*reshaped_size, -reshaped_size:]
+					new_feature_mask[counter, :, :, :] = feature_mask[batch, :, i*reshaped_size:(i+1)*reshaped_size, -reshaped_size:]
+				if i == rep_number - 1 and j == rep_number - 1:
+					new_channels[counter, :, :, :] = channels[batch, :, -reshaped_size:, -reshaped_size:]
+					new_feature_mask[counter, :, :, :] = feature_mask[batch, :, -reshaped_size:, -reshaped_size:]
+
+				counter += 1
+
+	print new_channels.shape, new_feature_mask.shape
+	return new_channels, new_feature_mask
+
 def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_size_y = 30, 
 		direc_name = "/home/vanvalen/Data/RAW_40X_tube",
 		file_name_save = os.path.join("/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/", "RAW_40X_tube_61x61.npz"),
@@ -222,10 +249,12 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		edge_feature = [1,0,0],
 		dilation_radius = 1,
 		display = False,
+		max_plotted = 5,
 		verbose = False,
 		process = True,
 		process_std = False,
 		process_remove_zeros = False,
+		reshape_size = False,
 		border_mode = "valid",
 		sample_mode = "subsample",
 		output_mode = "sample"):
@@ -238,6 +267,9 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 
 	if sample_mode not in ["subsample", "all"]:
 		raise Exception("sample_mode should be set to either subsample or all")
+
+	if output_mode not in ["sample", "conv", "disc"]:
+		raise Exception("output_mode should be set to either sample, conv, or disc")
 
 	num_direcs = len(training_direcs)
 	num_channels = len(channel_names)
@@ -294,6 +326,9 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		feature_mask_sum = np.sum(feature_mask[direc_counter,:,:,:], axis = 0)
 		feature_mask[direc_counter,num_of_features,:,:] = 1 - feature_mask_sum
 	
+	if reshape_size is not None:
+		channels, feature_mask = reshape_matrix(channels, feature_mask, reshaped_size = reshape_size)
+
 	feature_mask_trimmed = feature_mask[:,:,window_size_x:-window_size_x,window_size_y:-window_size_y]
 
 	# Sample pixels from the label matrix
@@ -329,7 +364,7 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		for b, r, c, l in zip(feature_batch, feature_rows, feature_cols, feature_label):
 			feature_mask_sample[b,l,r,c] = 1
 
-		# Compute weights for each_class
+		# Compute weights for each class
 		weights = class_weight.compute_class_weight('balanced', classes = np.unique(feature_label), y = feature_label)
 
 		if border_mode == "valid":
@@ -338,17 +373,58 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		# Save training data in npz format
 		np.savez(file_name_save, class_weights = weights, channels = channels, y  = feature_mask, y_sample = feature_mask_sample, win_x = window_size_x, win_y = window_size_y)
 	
+	if output_mode == "disc":
+
+		if feature_mask.shape[1] > 3:
+			raise ValueError("Only one interior feature is allowed for disc output mode")
+
+		feature_rows, feature_cols, feature_batch, feature_label = sample_label_matrix(feature_mask, edge_feature, output_mode = "sample",
+						sample_mode = "all", border_mode = border_mode,
+						window_size_x = window_size_x, window_size_y = window_size_y)
+		
+		# Compute weights for each class
+		weights = class_weight.compute_class_weight('balanced', classes = np.unique(feature_label), y = feature_label)
+
+		# Create mask with labeled cells
+		feature_mask_label = np.zeros((feature_mask.shape[0], 1, feature_mask.shape[2], feature_mask.shape[3]), dtype = 'int32')
+		for b in xrange(feature_mask.shape[0]):
+			interior_mask = feature_mask[b,1,:,:]
+			feature_mask_label[b,:,:,:] = label(interior_mask)
+
+		max_cells = np.amax(feature_mask_label)
+		feature_mask_binary = np.zeros((feature_mask.shape[0], max_cells+1, feature_mask.shape[2], feature_mask.shape[3]), dtype = 'int32')
+		for b in xrange(feature_mask.shape[0]):
+			label_mask = feature_mask_label[b,:,:,:]
+			for l in xrange(max_cells+1):
+				feature_mask_binary[b,l,:,:] = label_mask == l
+
+		if border_mode == "valid":
+			feature_mask_label_trimmed = feature_mask_label[:,:,window_size_x:-window_size_x,window_size_y:-window_size_y]
+			feature_mask_label = feature_mask_label_trimmed
+
+			feature_mask_binary_trimmed = feature_mask_binary[:,:,window_size_x:-window_size_x,window_size_y:-window_size_y]
+			feature_mask_binary = feature_mask_binary_trimmed
+
+		# Save training data in npz format
+		np.savez(file_name_save, class_weights = weights, channels = channels, y  = feature_mask_binary, win_x = window_size_x, win_y = window_size_y)
+	
 	if verbose:
 		print "Number of features: %s" % str(feature_mask.shape[1])
 		print "Number of training data points: %s" % str(len(feature_label))
 		print "Class weights: %s" % str(weights)
 
+		for j in xrange(feature_mask.shape[0]):
+			print 1.0/3.0* np.sum(feature_mask[j,:,:,:].astype(K.floatx()), axis = (0,1,2)) / np.sum(feature_mask[j,:,:,:].astype(K.floatx()), axis = (1,2))
+
 	if display:
 		if output_mode == "conv":
-			plot_training_data(channels, feature_mask_sample)
+			plot_training_data(channels, feature_mask_sample, max_plotted = max_plotted)
+
+		if output_mode == "disc":
+			plot_training_data(channels, feature_mask_label, max_plotted = max_plotted)
 
 		else:
-			plot_training_data(channels, feature_mask)
+			plot_training_data(channels, feature_mask, max_plotted = max_plotted)
 
 def make_training_data_movie(max_training_examples = 1e7, window_size_x = 30, window_size_y = 30, 
 		direc_name = '/home/vanvalen/Data/HeLa/set2/movie',

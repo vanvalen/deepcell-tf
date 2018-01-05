@@ -26,8 +26,8 @@ imsave(os.path.join(direc, 'Point2_prob_map_1.png'), prob_map_1)
 """
 Load probability map 
 """
-direc = '/home/vanvalen/Data/MIBI/Point3/Cytoplasm'
-file_name = 'feature_1_frame_0.tif'
+direc = '/home/vanvalen/Data/RAW_40X_tube/Pos33/Cytoplasm'
+file_name = 'feature_0_frame_1.tif'
 im = imread(os.path.join(direc, file_name))
 
 """

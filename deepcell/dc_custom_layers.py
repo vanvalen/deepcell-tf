@@ -71,6 +71,103 @@ from dc_helper_functions import *
 Custom layers
 """
 
+class Location(Layer):
+	def __init__(self, in_shape, data_format = None, **kwargs):
+		super(Location,self).__init__(**kwargs)
+		self.in_shape = in_shape
+		self.data_format = data_format
+
+	def compute_output_shape(self, input_shape):
+		if self.data_format == 'channels_first':
+			return (input_shape[0], 2, input_shape[2], input_shape[3])
+
+		if self.data_format == 'channels_last':
+			return (input_shape[0], input_shape[1], input_shape[2], 2)
+
+	def call(self, inputs):
+		input_shape = self.in_shape
+
+		if self.data_format == 'channels_last':
+			x = tf.range(0, input_shape[0], dtype = K.floatx())
+			y = tf.range(0, input_shape[1], dtype = K.floatx())
+
+		else:
+			x = tf.range(0, input_shape[1], dtype = K.floatx())
+			y = tf.range(0, input_shape[2], dtype = K.floatx())
+
+		x = tf.divide(x, tf.reduce_max(x))
+		y = tf.divide(y, tf.reduce_max(y))
+
+		loc_x, loc_y = tf.meshgrid(y, x)
+
+		if self.data_format == 'channels_last':
+			loc = tf.stack([loc_x, loc_y], axis = -1)
+		else:
+			loc = tf.stack([loc_x, loc_y], axis = 0)
+
+
+		location = tf.expand_dims(loc, 0)
+
+		return location
+
+	def get_config(self):
+		config = {'in_shape': self.in_shape,
+					'data_format': self.data_format}
+		base_config = super(Location, self).get_config()
+		return dict(list(base_config.items()) + list(config.items()))
+	
+class Resize(Layer):
+	def __init__(self, scale=2, data_format=None, **kwargs):
+		super(Resize, self).__init__(**kwargs)
+
+		backend = K.backend()
+		if backend == "theano":
+			Exception('This version of DeepCell only works with the tensorflow backend')
+		self.data_format = conv_utils.normalize_data_format(data_format)
+		self.scale = scale
+
+	def compute_output_shape(self, input_shape):
+		if self.data_format == 'channels_first':
+			rows = input_shape[2]
+			cols = input_shape[3]
+		elif self.data_format == 'channels_last':
+			rows = input_shape[1]
+			cols = input_shape[2]
+
+		rows *= scale
+		cols *= scale
+
+		if self.data_format == 'channels_first':
+			return (input_shape[0], input_shape[1], rows, cols)
+		elif self.data_format == 'channels_last':
+			return (input_shape[0], rows, cols, input_shape[3])
+
+	def call(self, inputs):
+		if self.data_format == 'channels_first':
+			channel_last = K.permute_dimensions(inputs, (0,2,3,1))
+		else:
+			channel_last = inputs
+
+		input_shape = tf.shape(channel_last)
+
+		rows = self.scale * input_shape[1]
+		cols = self.scale * input_shape[2]
+
+		resized = tf.image.resize_images(channel_last, (rows, cols))
+
+		if self.data_format =='channels_first':
+			output = K.permute_dimensions(resized, (0,3,1,2))
+		else:
+			output = resized
+
+		return output
+
+	def get_config(self):
+		config = {'scale': self.scale,
+					'data_format': self.data_format}
+		base_config = super(Resize, self).get_config()
+		return dict(list(base_config.items()) + list(config.items()))
+
 class dilated_MaxPool2D(Layer):
 	def __init__(self, pool_size=(2, 2), strides=None, dilation_rate = 1, padding='valid',
 				data_format=None, **kwargs):
@@ -87,7 +184,7 @@ class dilated_MaxPool2D(Layer):
 		self.data_format = conv_utils.normalize_data_format(data_format)
 		self.input_spec = InputSpec(ndim=4)
 
-	def compute_output_shape(self):
+	def compute_output_shape(self, input_shape):
 		if self.data_format == 'channels_first':
 			rows = input_shape[2]
 			cols = input_shape[3]

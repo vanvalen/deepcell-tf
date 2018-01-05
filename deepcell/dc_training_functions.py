@@ -144,7 +144,7 @@ def train_model_conv(model = None, dataset = None,  optimizer = None,
 
 	train_dict, (X_test, Y_test) = get_data(training_data_file_name, mode = 'conv')
 
-	class_weight = class_weight #train_dict["class_weights"]
+	class_weights = None #class_weight #train_dict["class_weights"]
 	# the data, shuffled and split between train and test sets
 	print('Training data shape:', train_dict["channels"].shape)
 	print('Training labels shape:', train_dict["labels"].shape)
@@ -159,9 +159,14 @@ def train_model_conv(model = None, dataset = None,  optimizer = None,
 	print output_shape, n_classes
 
 	# class_weights = np.array([27.23, 6.12, 0.36], dtype = K.floatx())
-	class_weights = np.array([69.86,15.04,0.34], dtype = K.floatx())
+	# class_weights = np.array([69.86,15.04,0.34], dtype = K.floatx())
+	# class_weights = np.array([1,1,1], dtype = K.floatx())
+
+	print class_weights
 	def loss_function(y_true, y_pred):
-		return categorical_crossentropy(y_true, y_pred, axis = 3, class_weights = class_weights, from_logits = False)
+		# return categorical_crossentropy(y_true, y_pred, axis = 3, class_weights = class_weights, from_logits = False)
+		return weighted_categorical_crossentropy(y_true, y_pred, n_classes = n_classes, from_logits = False)
+		# return discriminative_instance_loss(y_true, y_pred)
 
 	model.compile(loss=loss_function,
 				  optimizer=optimizer,
@@ -197,19 +202,67 @@ def train_model_conv(model = None, dataset = None,  optimizer = None,
 	model.save_weights(file_name_save)
 	np.savez(file_name_save_loss, loss_history = loss_history.history)
 
-	data_location = '/home/vanvalen/Data/RAW_40X_tube/set2/'
-	channel_names = ["channel004", "channel001"]
-	image_list = get_images_from_directory(data_location, channel_names)
-	image = image_list[0]
-	for j in xrange(image.shape[1]):
-			image[0,j,:,:] = process_image(image[0,j,:,:], 30, 30, False)
+	return model
 
-	pred = model.predict(image)
-	for j in xrange(3):
-		save_name = 'feature_' +str(j) + '.tiff'
-		tiff.imsave(save_name, pred[0,:,:,j])
+def train_model_disc(model = None, dataset = None,  optimizer = None, 
+	expt = "", it = 0, batch_size = 1, n_epoch = 100,
+	direc_save = "/home/vanvalen/ImageAnalysis/DeepCell2/trained_networks/", 
+	direc_data = "/home/vanvalen/ImageAnalysis/DeepCell2/training_data_npz/", 
+	lr_sched = rate_scheduler(lr = 0.01, decay = 0.95),
+	rotation_range = 0, flip = True, shear = 0, class_weight = None):
+
+	training_data_file_name = os.path.join(direc_data, dataset + ".npz")
+	todays_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+	file_name_save = os.path.join(direc_save, todays_date + "_" + dataset + "_" + expt + "_" + str(it)  + ".h5")
+
+	file_name_save_loss = os.path.join(direc_save, todays_date + "_" + dataset + "_" + expt + "_" + str(it) + ".npz")
+
+	train_dict, (X_test, Y_test) = get_data(training_data_file_name, mode = 'conv')
+
+	# the data, shuffled and split between train and test sets
+	print('Training data shape:', train_dict["channels"].shape)
+	print('Training labels shape:', train_dict["labels"].shape)
+
+	print('Testing data shape:', X_test.shape)
+	print('Testing labels shape:', Y_test.shape)
+
+	# determine the number of classes
+	output_shape = model.layers[-1].output_shape
+	n_classes = output_shape[-1]
+
+	print output_shape, n_classes
+
+	def loss_function(y_true, y_pred):
+		return discriminative_instance_loss(y_true, y_pred)
+
+	model.compile(loss=loss_function,
+				  optimizer=optimizer)
+
+	print('Using real-time data augmentation.')
+
+	# this will do preprocessing and realtime data augmentation
+	datagen = ImageFullyConvDataGenerator(
+		rotation_range = rotation_range,  # randomly rotate images by 0 to rotation_range degrees
+		shear_range = shear, # randomly shear images in the range (radians , -shear_range to shear_range)
+		horizontal_flip= flip,  # randomly flip images
+		vertical_flip= flip)  # randomly flip images
+
+	Y_test = np.rollaxis(Y_test,1,4)
+	
+	loss_history = model.fit_generator(datagen.flow(train_dict, batch_size = batch_size),
+						steps_per_epoch = train_dict["labels"].shape[0]/batch_size,
+						epochs = n_epoch,
+						validation_data = (X_test, Y_test),
+						validation_steps = X_test.shape[0]/batch_size,
+						callbacks = [ModelCheckpoint(file_name_save, monitor = 'val_loss', verbose = 1, save_best_only = True, mode = 'auto'),
+							LearningRateScheduler(lr_sched)])
+	
+	model.save_weights(file_name_save)
+	np.savez(file_name_save_loss, loss_history = loss_history.history)
 
 	return model
+
 
 def train_model_conv_sample(model = None, dataset = None,  optimizer = None, 
 	expt = "", it = 0, batch_size = 1, n_epoch = 100,

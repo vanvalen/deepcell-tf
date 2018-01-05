@@ -10,7 +10,7 @@ Code for adjusting the contrast of images to aid image annotaters
 Import python packages
 """
 
-from cnn_functions import get_image, get_images_from_directory
+from deepcell import get_image, get_images_from_directory
 import numpy as np
 import skimage as sk
 import os
@@ -23,9 +23,9 @@ import scipy
 Load images
 """
 
-directory = "/home/vanvalen/Data/HeLa/set2/RawImages"
-save_directory = os.path.join(directory, "save")
-channel_names = ["Phase", "Far-red"]
+directory = "/home/vanvalen/Data/HeLa/set5/RawImages"
+save_directory = os.path.join("/home/vanvalen/Data/HeLa/set5/", "Processed")
+channel_names = ["Phase_000", "Far-red"]
 
 images = get_images_from_directory(directory, channel_names)
 
@@ -65,6 +65,7 @@ for j in xrange(number_of_images):
 	phase_image = sk.exposure.equalize_hist(phase_image)
 	nuclear_image = sk.exposure.equalize_adapthist(nuclear_image, kernel_size = [100,100], clip_limit = 0.03)
 
+	phase_image = ndimage.filters.gaussian_filter(phase_image, 1)
 	phase_image = sk.img_as_uint(phase_image)
 	nuclear_image = sk.img_as_uint(nuclear_image)
 
@@ -84,12 +85,17 @@ for j in xrange(number_of_images):
 		for k in xrange(2):
 			phase_temp = phase_image[x_lower_lim[i]:x_upper_lim[i],y_lower_lim[k]:y_upper_lim[k]]
 			nuclear_temp = nuclear_image[x_lower_lim[i]:x_upper_lim[i],y_lower_lim[k]:y_upper_lim[k]]
+
+			phase_temp_2 = np.repeat(phase_temp[:,:,np.newaxis], 3, axis = 2)
+			nuclear_temp_2 = np.repeat(nuclear_temp[:,:,np.newaxis], 3, axis = 2)
 	
+			# phase_temp_2[:,:,0] = 255-nuclear_temp
+
 			phase_name = os.path.join(save_directory,"phase_" + str(j) + "_quad_" + str(i) + "_" + str(k) + ".png")
 			nuclear_name = os.path.join(save_directory,"nuclear_" + str(j) + "_quad_" + str(i) + "_" + str(k) + ".png")
 
-			scipy.misc.imsave(phase_name, phase_temp)
-			scipy.misc.imsave(nuclear_name, nuclear_temp)
+			scipy.misc.imsave(phase_name, phase_temp_2)
+			scipy.misc.imsave(nuclear_name, nuclear_temp_2)
 
 
 

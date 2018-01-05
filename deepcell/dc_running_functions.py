@@ -72,7 +72,7 @@ Running convnets
 """
 
 def run_model(image, model, win_x = 30, win_y = 30, std = False, split = True, process = True):
-	image = np.pad(image, pad_width = ((0,0), (0,0), (win_x, win_x),(win_y,win_y)), mode = 'constant', constant_values = 0)
+	# image = np.pad(image, pad_width = ((0,0), (0,0), (win_x, win_x),(win_y,win_y)), mode = 'constant', constant_values = 0)
 
 	if process:
 		for j in xrange(image.shape[1]):
@@ -137,12 +137,14 @@ def run_model_on_directory(data_location, channel_names, output_location, model,
 def run_models_on_directory(data_location, channel_names, output_location, model_fn, list_of_weights, n_features = 3, image_size_x = 1080, image_size_y = 1280, win_x = 30, win_y = 30, std = False, split = True, process = True, save = True):
 	
 	if split:
-		input_shape = (len(channel_names),image_size_x/2+win_x, image_size_y/2+win_y)
+		input_shape = (1, len(channel_names),image_size_x/2+win_x, image_size_y/2+win_y)
 	else:
-		input_shape = (len(channel_names), image_size_x, image_size_y)
+		input_shape = (1, len(channel_names), image_size_x, image_size_y)
 
-	model = model_fn(input_shape = input_shape, n_features = n_features)
+	model = model_fn(batch_shape = input_shape, n_features = n_features)
 
+	for layer in model.layers:
+		print layer.name
 	n_features = model.layers[-1].output_shape[1]
 
 	model_outputs = []

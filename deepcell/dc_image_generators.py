@@ -209,7 +209,7 @@ class ImageFullyConvIterator(Iterator):
 		else:
 			batch_x = np.zeros(tuple([len(index_array)] + [self.x.shape[2], self.x.shape[3]] + [self.x.shape[1]]))
 			if self.y is not None:
-				batch_y = np.zeros(tuple([len(index_array)] + [self.y.shape[2], self.y.shape[3]] + self.y.shape[1]))
+				batch_y = np.zeros(tuple([len(index_array)] + [self.y.shape[2], self.y.shape[3]] + [self.y.shape[1]]))
 
 		for i, j in enumerate(index_array):
 			batch = j
@@ -230,6 +230,8 @@ class ImageFullyConvIterator(Iterator):
 				batch_x[i] = x
 				batch_y[i] = y
 			if self.channels_axis == 3:
+				print x.shape
+				print batch_x.shape
 				batch_x[i] = np.moveaxis(x, 1, 3)
 				batch_y[i] = np.moveaxis(y, 1, 3)
 
@@ -593,7 +595,7 @@ class ImageFullyConvDataGenerator(object):
 				h, w = y.shape[img_row_axis], y.shape[img_col_axis]
 				transform_matrix_y = transform_matrix_offset_center(transform_matrix, h, w)
 				y = apply_transform(y, transform_matrix_y, 0,
-					fill_mode = 'constant', cval = np.argmax(labels.flatten()))
+					fill_mode = 'constant', cval = 0)
 
 		if transform_matrix is not None:
 			h, w = x.shape[img_row_axis], x.shape[img_col_axis]

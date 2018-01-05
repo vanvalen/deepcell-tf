@@ -28,24 +28,24 @@ import scipy as sp
 from scipy import ndimage
 from skimage import feature
 from sklearn.utils import class_weight
-from cnn_functions import get_image
-from cnn_functions import format_coord as cf
+from deepcell import get_image
+from deepcell import format_coord as cf
 from skimage import morphology as morph
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 
 
-from cnn_functions import make_training_data as make_training_data
+from deepcell import make_training_data as make_training_data
 
 # Define maximum number of training examples
 max_training_examples = 1e6
 window_size = 30
 
 # Load data
-direc_name = '/home/vanvalen/Data/RAW_40X_tube/'
-file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/', 'RAW_40X_tube_conv_61x61.npz')
-training_direcs = ["set2", "set3", "set4", "set5", "set6"]
-channel_names = ["channel004", "channel001"]
+direc_name = '/home/vanvalen/DeepCell/training_data/HeLa_joint/'
+file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/HeLa/', 'HeLa_joint_disc_valid_61x61.npz')
+training_direcs = ["set2", "set3", "set4", "set5", "set1"]
+channel_names = ["phase", "nuclear"]
 
 # Specify the number of feature masks that are present
 num_of_features = 2
@@ -61,11 +61,14 @@ make_training_data(max_training_examples = max_training_examples, window_size_x 
 		channel_names = channel_names,
 		num_of_features = 2,
 		edge_feature = edge_feature,
-		dilation_radius = 0,
-		border_mode = "same",
+		dilation_radius = 1,
+		border_mode = "valid",
 		sample_mode = "all",
-		output_mode = "conv",
-		display = True,
+		output_mode = "disc",
+		reshape_size = 512,
+		display = False,
+		max_plotted = 5,
+		process_std = True,
 		verbose = True)
 
 

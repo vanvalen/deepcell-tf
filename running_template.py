@@ -15,7 +15,6 @@ from cnn_functions import nikon_getfiles, get_image, run_models_on_directory, ge
 from model_zoo import dilated_bn_feature_net_61x61 as cyto_fn
 from model_zoo import dilated_bn_feature_net_61x61 as nuclear_fn
 from tensorflow.contrib.keras import backend as K
-K.manual_variable_initialization(False)
 
 import os
 import numpy as np

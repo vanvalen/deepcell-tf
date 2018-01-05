@@ -20,7 +20,7 @@ import datetime
 import numpy as np
 
 batch_size = 256
-n_epoch = 15
+n_epoch = 30
 
 dataset = "RAW_40X_tube_61x61"
 expt = "bn_multires_feature_net_61x61"
@@ -29,7 +29,7 @@ direc_save = "/home/vanvalen/DeepCell/trained_networks/RAW40X_tube/"
 direc_data = "/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/"
 
 optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-lr_sched = rate_scheduler(lr = 0.01, decay = 0.95)
+lr_sched = rate_scheduler(lr = 0.01, decay = 0.99)
 
 # file_name = os.path.join(direc_data, dataset + ".npz")
 # training_data = np.load(file_name)
