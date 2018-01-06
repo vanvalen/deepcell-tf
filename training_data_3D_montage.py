@@ -53,47 +53,13 @@ for cell_type, number_of_sets, channel_name in zip(cell_types, list_of_number_of
 
 		for i in xrange(8):
 			for j in xrange(8):
-				cropped_image = []
+				list_of_cropped_images = []
 				for stack_number in xrange(number_of_images):
-					c
-
-
-
-		"""
-		Adjust contrast
-		"""
-
-		for j in xrange(number_of_images):
-			print "Processing image " + str(j+1) + " of " + str(number_of_images)
-			image = np.array(images[j], dtype = 'float')
-			nuclear_image = image[0,0,:,:]
-
-			"""
-			Do stuff to enhance contrast
-			"""
-
-			nuclear = sk.util.invert(nuclear_image)
-
-			win = 30
-			avg_kernel = np.ones((2*win + 1, 2*win + 1))
-
-			nuclear_image -= ndimage.filters.median_filter(nuclear_image, footprint = avg_kernel) #ndimage.convolve(nuclear_image, avg_kernel)/avg_kernel.size
-
-			nuclear_image += 100*sk.filters.sobel(nuclear_image)
-			nuclear_image = sk.util.invert(nuclear_image)
-			nuclear_image = sk.exposure.rescale_intensity(nuclear_image, in_range = 'image', out_range = 'float')
-			nuclear_image = sk.exposure.equalize_adapthist(nuclear_image, kernel_size = [100,100], clip_limit = 0.03)
-			nuclear_image = sk.img_as_uint(nuclear_image)
-
-			"""
-			Save images
-			"""
-			image_size_x = nuclear_image.shape[0]
-			image_size_y = nuclear_image.shape[1]
-
-			nuclear_name = os.path.join(save_direc,"nuclear_" + str(j) + ".png")
-
-			scipy.misc.imsave(nuclear_name, nuclear_image)
+					cropped_image = images[stack_number][i*crop_size_x:(i+1)*crop_size_x, j*crop_size_y:(j+1)*crop_size_y]
+					list_of_cropped_images += [cropped_image]
+				montage = np.concatenate(list_of_cropped_images, axis = 1)
+				montage_name = os.path.join(save_direc, "montage_" + str(i) + "_" + str(j) + ".png")
+				scipy.misc.imsave(montage_name, montage)
 
 
 
