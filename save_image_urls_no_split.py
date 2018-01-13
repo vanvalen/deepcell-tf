@@ -32,10 +32,13 @@ for cell_type, number_of_sets, number_of_frames in zip(cell_types, list_of_numbe
 		set_number = 'set' + str(set_number)
 		data_type = 'nuclear'
 
-		base_direc = os.path.join('https://storage.googleapis.com/daves-new-bucket/data/', data_type, cell_type, set_number, 'Processed')
-		for j in xrange(number_of_frames):
-			file_name = data_type + '_' + str(j) + '.png'
-			list_of_urls += [os.path.join(base_direc, file_name)]
+		base_direc = os.path.join('https://storage.googleapis.com/daves-new-bucket/data/', data_type, cell_type, set_number, 'Montage')
+		
+		for i in xrange(4):
+			for j in xrange(4):
+				# for j in xrange(number_of_frames):
+				file_name = 'montage' + '_' + str(i) + '_' + str(j) + '.png'
+				list_of_urls += [os.path.join(base_direc, file_name)]
 
 		data = {'image_url': list_of_urls, 'cell_type': cell_type, 'set_number': set_number}
 		dataframe = pd.DataFrame(data=data)

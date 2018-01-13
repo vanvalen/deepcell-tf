@@ -27,6 +27,7 @@ cell_types = ["MouseBrain"]
 list_of_number_of_sets = [2]
 channel_names = ["nuclear"]
 
+base_direc = "/home/vanvalen/Data/training_data/nuclear/"
 save_subdirec = "Montage"
 data_subdirec = "Processed"
 
@@ -48,16 +49,28 @@ for cell_type, number_of_sets, channel_name in zip(cell_types, list_of_number_of
 
 		image_size = images[0].shape
 
-		crop_size_x = image_size[0]/8
-		crop_size_y = image_size[1]/8
+		crop_size_x = image_size[2]/4
+		crop_size_y = image_size[3]/4
 
-		for i in xrange(8):
-			for j in xrange(8):
+		for i in xrange(4):
+			for j in xrange(4):
 				list_of_cropped_images = []
 				for stack_number in xrange(number_of_images):
-					cropped_image = images[stack_number][i*crop_size_x:(i+1)*crop_size_x, j*crop_size_y:(j+1)*crop_size_y]
+					img = images[stack_number][0,0,:,:]
+					cropped_image = img[i*crop_size_x:(i+1)*crop_size_x, j*crop_size_y:(j+1)*crop_size_y]
 					list_of_cropped_images += [cropped_image]
-				montage = np.concatenate(list_of_cropped_images, axis = 1)
+
+				list_0 = list_of_cropped_images[0:10]
+				list_1 = list_of_cropped_images[10:20]
+				list_2 = list_of_cropped_images[20:30]
+
+				montage_0 = np.concatenate(list_0, axis = 1)
+				montage_1 = np.concatenate(list_1, axis = 1)
+				montage_2 = np.concatenate(list_2, axis = 1)
+
+				list_3 = [montage_0, montage_1, montage_2]
+				montage = np.concatenate(list_3, axis = 0)
+
 				montage_name = os.path.join(save_direc, "montage_" + str(i) + "_" + str(j) + ".png")
 				scipy.misc.imsave(montage_name, montage)
 
