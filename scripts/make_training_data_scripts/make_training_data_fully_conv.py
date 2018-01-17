@@ -42,9 +42,9 @@ max_training_examples = 1e6
 window_size = 30
 
 # Load data
-direc_name = '/home/vanvalen/DeepCell/training_data/HeLa_joint/'
-file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/HeLa/', 'HeLa_joint_disc_valid_61x61.npz')
-training_direcs = ["set2", "set3", "set4", "set5", "set1"]
+direc_name = '/data/training_data/HeLa_joint/'
+file_name_save = os.path.join('/home/vanvalen/DeepCell/training_data_npz/HeLa/', 'HeLa_joint_disc_same_61x61.npz')
+training_direcs = ["set1", "set2", "set3", "set4", "set5"]
 channel_names = ["phase", "nuclear"]
 
 # Specify the number of feature masks that are present
@@ -62,7 +62,7 @@ make_training_data(max_training_examples = max_training_examples, window_size_x 
 		num_of_features = 2,
 		edge_feature = edge_feature,
 		dilation_radius = 1,
-		border_mode = "valid",
+		border_mode = "same",
 		sample_mode = "all",
 		output_mode = "disc",
 		reshape_size = 512,

@@ -50,20 +50,13 @@ from sklearn.utils import class_weight
 
 
 import tensorflow as tf
-import tensorflow.contrib.keras as keras
-from tensorflow.contrib.keras import backend as K
-from tensorflow.contrib.keras.api.keras.layers import Layer, InputSpec, Input, Activation, Dense, Flatten, BatchNormalization
-from tensorflow.contrib.keras.python.keras.layers.merge import Concatenate
-from tensorflow.contrib.keras.api.keras.layers import Conv2D, MaxPool2D, AvgPool2D
-from tensorflow.contrib.keras.api.keras.preprocessing.image import random_rotation, random_shift, random_shear, random_zoom, random_channel_shift
-from tensorflow.contrib.keras.api.keras.preprocessing.image import apply_transform, flip_axis, array_to_img, img_to_array, load_img, ImageDataGenerator, Iterator, NumpyArrayIterator, DirectoryIterator
-from tensorflow.contrib.keras.api.keras.callbacks import ModelCheckpoint, LearningRateScheduler
-import tensorflow.contrib.keras.api.keras.activations as activations
-import tensorflow.contrib.keras.api.keras.initializers as initializers
-import tensorflow.contrib.keras.api.keras.losses as losses
-import tensorflow.contrib.keras.api.keras.regularizers as regularizers
-import tensorflow.contrib.keras.api.keras.constraints as constraints
-from tensorflow.contrib.keras.python.keras.utils import conv_utils
+from tensorflow import keras
+from tensorflow.python.keras import backend as K
+from tensorflow.python.keras.layers import Layer, InputSpec, Input, Activation, Dense, Flatten, BatchNormalization, Conv2D, MaxPool2D, AvgPool2D, Concatenate
+from tensorflow.python.keras.preprocessing.image import random_rotation, random_shift, random_shear, random_zoom, random_channel_shift, apply_transform, flip_axis, array_to_img, img_to_array, load_img, ImageDataGenerator, Iterator, NumpyArrayIterator, DirectoryIterator
+from tensorflow.python.keras.callbacks import ModelCheckpoint, LearningRateScheduler
+from tensorflow.python.keras import activations, initializers, losses, regularizers, constraints
+from tensorflow.python.keras._impl.keras.utils import conv_utils
 
 from dc_helper_functions import *
 

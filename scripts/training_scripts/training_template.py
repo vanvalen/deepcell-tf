@@ -10,10 +10,10 @@ Run command:
 """
 
 from __future__ import print_function
-from tensorflow.contrib.keras.api.keras.optimizers import SGD, RMSprop
+from tensorflow.python.keras.optimizers import SGD, RMSprop
 
 from deepcell import rate_scheduler, train_model_sample as train_model
-from model_zoo import bn_multires_feature_net_61x61 as the_model
+from deepcell import bn_feature_net_61x61 as the_model
 
 import os
 import datetime
@@ -22,19 +22,14 @@ import numpy as np
 batch_size = 256
 n_epoch = 30
 
-dataset = "RAW_40X_tube_61x61"
-expt = "bn_multires_feature_net_61x61"
+dataset = "HeLa_joint"
+expt = "bn_feature_net_61x61"
 
-direc_save = "/home/vanvalen/DeepCell/trained_networks/RAW40X_tube/"
-direc_data = "/home/vanvalen/DeepCell/training_data_npz/RAW40X_tube/"
+direc_save = "/data/trained_networks/HeLa/"
+direc_data = "/data/training_data_npz/HeLa/"
 
 optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
 lr_sched = rate_scheduler(lr = 0.01, decay = 0.99)
-
-# file_name = os.path.join(direc_data, dataset + ".npz")
-# training_data = np.load(file_name)
-# class_weights = training_data["class_weights"]
-# print(class_weights)
 
 class_weights = {0:1, 1:1, 2:1}
 
