@@ -13,8 +13,6 @@ Import python packages
 import numpy as np
 from numpy import array
 import matplotlib
-matplotlib.use('TkAgg')
-matplotlib.get_backend()
 import matplotlib.pyplot as plt
 import shelve
 from contextlib import closing
@@ -130,11 +128,11 @@ def run_model_on_directory(data_location, channel_names, output_location, model,
 def run_models_on_directory(data_location, channel_names, output_location, model_fn, list_of_weights, n_features = 3, image_size_x = 1080, image_size_y = 1280, win_x = 30, win_y = 30, std = False, split = True, process = True, save = True):
 	
 	if split:
-		input_shape = (1, len(channel_names),image_size_x/2+win_x, image_size_y/2+win_y)
+		input_shape = (len(channel_names),image_size_x/2+win_x, image_size_y/2+win_y)
 	else:
-		input_shape = (1, len(channel_names), image_size_x, image_size_y)
+		input_shape = (len(channel_names), image_size_x, image_size_y)
 
-	model = model_fn(batch_shape = input_shape, n_features = n_features)
+	model = model_fn(input_shape = input_shape, n_features = n_features)
 
 	for layer in model.layers:
 		print layer.name

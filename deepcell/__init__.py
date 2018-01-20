@@ -13,8 +13,6 @@ Import python packages
 import numpy as np
 from numpy import array
 import matplotlib
-matplotlib.use('TkAgg')
-matplotlib.get_backend()
 import matplotlib.pyplot as plt
 import shelve
 from contextlib import closing

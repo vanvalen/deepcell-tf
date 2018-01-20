@@ -13,8 +13,6 @@ Import python packages
 import numpy as np
 from numpy import array
 import matplotlib
-matplotlib.use('TkAgg')
-matplotlib.get_backend()
 import matplotlib.pyplot as plt
 import shelve
 from contextlib import closing
@@ -247,7 +245,7 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 		process = True,
 		process_std = False,
 		process_remove_zeros = False,
-		reshape_size = False,
+		reshape_size = None,
 		border_mode = "valid",
 		sample_mode = "subsample",
 		output_mode = "sample"):

@@ -11,10 +11,10 @@ Run command:
 import h5py
 import tifffile as tiff
 
-from cnn_functions import nikon_getfiles, get_image, run_models_on_directory, get_image_sizes #, segment_nuclei, segment_cytoplasm, dice_jaccard_indices
-from model_zoo import dilated_bn_feature_net_61x61 as cyto_fn
-from model_zoo import dilated_bn_feature_net_61x61 as nuclear_fn
-from tensorflow.contrib.keras import backend as K
+from deepcell import nikon_getfiles, get_image, run_models_on_directory, get_image_sizes #, segment_nuclei, segment_cytoplasm, dice_jaccard_indices
+from deepcell import dilated_bn_feature_net_61x61 as cyto_fn
+from deepcell import dilated_bn_feature_net_61x61 as nuclear_fn
+from tensorflow.python.keras import backend as K
 
 import os
 import numpy as np

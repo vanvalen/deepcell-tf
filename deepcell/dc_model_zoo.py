@@ -539,7 +539,8 @@ def dilated_bn_multires_feature_net_61x61(input_shape = (2, 1080, 1280), n_featu
 
 	return model
 
-def bn_multires_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = False, location = True):
+def bn_multires_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = True, location = False):
+	
 	if batch_shape is None:
 		input1 = Input(shape = input_shape)
 	else:
@@ -611,6 +612,7 @@ def bn_multires_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_f
 	act10 = Activation('relu')(norm10)
 
 	tensor_prod3 = TensorProd2D(128, n_features, kernel_initializer = init, kernel_regularizer = l2(reg))(act10)
+	
 	if softmax:
 		act11 = Activation(axis_softmax)(tensor_prod3)
 	else:
@@ -707,7 +709,7 @@ def bn_multires_pool_feature_net(input_shape = (2,1080,1280), n_features = 3, re
 
 	return model
 
-def bn_dense_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = False):
+def bn_dense_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = True, location = False):
 	
 	if batch_shape is None:
 		input1 = Input(shape = input_shape)
@@ -715,13 +717,16 @@ def bn_dense_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_feat
 		input1 = Input(batch_shape = batch_shape)
 		input_shape = batch_shape[1:]
 
-	loc0 = Location(in_shape = input_shape)(input1)
-	merge0 = Concatenate(axis = 1)([input1, loc0])
+	if location is True:
+		loc0 = Location(in_shape = input_shape)(input1)
+		input2 = Concatenate(axis = 1)([input1, loc0])
+	else:
+		input2 = input1
 
-	conv1 = Conv2D(48, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge0)
+	conv1 = Conv2D(48, (3,3), dilation_rate = 1, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input2)
 	norm1 = BatchNormalization(axis = 1)(conv1)
 	act1 = Activation('relu')(norm1)
-	merge1 = Concatenate(axis = 1)([merge0, act1])
+	merge1 = Concatenate(axis = 1)([input2, act1])
 
 	conv2 = Conv2D(48, (3,3), dilation_rate = 2, kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge1)
 	norm2 = BatchNormalization(axis = 1)(conv2)
