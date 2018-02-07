@@ -23,7 +23,7 @@ import scipy
 Load images
 """
 
-base_direc = "/home/vanvalen/Data/training_data/nuclear/"
+base_direc = "/data/training_data/nuclear/"
 cell_types = ["HEK293", "HeLa-S3", "MCF10A", "MouseBrain", "NIH-3T3", "RAW264.7"]
 list_of_number_of_sets = [3, 8, 1, 1, 3, 8]
 channel_names = ["channel002", "Far-red", "max_nuc_skip", "DAPI", "channel002", "channel000"]
@@ -33,7 +33,7 @@ list_of_number_of_sets = [1,3,8]
 channel_names = ["DAPI", "channel002", "channel000"]
 
 cell_types = ["MouseBrain"]
-list_of_number_of_sets = [1]
+list_of_number_of_sets = [7]
 channel_names = ["DAPI"]
 
 save_subdirec = "Processed"

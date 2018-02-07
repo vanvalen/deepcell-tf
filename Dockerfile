@@ -7,11 +7,11 @@ WORKDIR /deepcell-tf
 # Add the contents of the working directory to /deepcell-tf
 ADD . /deepcell-tf
 
-# Install the deep cell package
-RUN python setup.py install
-
 # Install the packages specified in requirements.txt
 RUN pip install -r requirements.txt
+
+# Install the deep cell package
+RUN python setup.py install
 
 # Change matplotlibrc file to use the Agg backend
 RUN echo "backend : Agg" > /usr/local/lib/python2.7/dist-packages/matplotlib/mpl-data/matplotlibrc

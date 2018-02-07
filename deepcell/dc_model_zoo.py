@@ -1142,6 +1142,70 @@ def dilated_bn_feature_net_gather_61x61(input_shape = (2, 1080, 1280), training_
 	print model.output_shape
 	return model
 
+"""
+3D Conv-nets
+"""
 
+def bn_dense_feature_net_lstm(input_shape = (1, 60, 256, 256), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = True):	
+	if batch_shape is None:
+		input1 = Input(shape = input_shape)
+	else:
+		input1 = Input(batch_shape = batch_shape)
+		input_shape = batch_shape[1:]
 
+	conv1 = Conv3D(64, (1, 3, 3), dilation_rate = (1, 1, 1), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input1)
+	norm1 = BatchNormalization(axis = 1)(conv1)
+	act1 = Activation('relu')(norm1)
+	merge1 = Concatenate(axis = 1)([input2, act1])
+
+	conv2 = Conv3D(64, (1, 3, 3), dilation_rate = (1, 2, 2), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge1)
+	norm2 = BatchNormalization(axis = 1)(conv2)
+	act2 = Activation('relu')(norm2)
+	merge2 = Concatenate(axis = 1)([merge1, act2])
+
+	conv3 = Conv3D(64, (1, 3, 3), dilation_rate = (1, 4, 4), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge2)
+	norm3 = BatchNormalization(axis = 1)(conv3)
+	act3 = Activation('relu')(norm3)
+	merge3 = Concatenate(axis = 1)([merge2, act3])
+
+	conv4 = Conv3D(64, (1, 3, 3), dilation_rate = (1, 8, 8), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge3)
+	norm4 = BatchNormalization(axis = 1)(conv4)
+	act4 = Activation('relu')(norm4)
+	merge4 = Concatenate(axis = 1)([merge3, act4])
+
+	conv5 = Conv3D(64, (1, 3, 3), dilation_rate = (1, 16, 16), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge4)
+	norm5 = BatchNormalization(axis = 1)(conv5)
+	act5 = Activation('relu')(norm5)
+	merge5 = Concatenate(axis = 1)([merge4, act5])
+
+	conv6 = Conv3D(64, (1, 3, 3), dilation_rate = (1, 32, 32), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge5)
+	norm6 = BatchNormalization(axis = 1)(conv6)
+	act6 = Activation('relu')(norm6)
+	merge6 = Concatenate(axis = 1)([merge5, act6])
+
+	tensorprod1 = TensorProd2D(64*6, 256, kernel_initializer = init, kernel_regularizer = l2(reg))(merge6)
+	permute1 = Permute((2, 1, 3, 4))(tensorprod1)
+
+	lstm1 = ConvLSTM2D(64, (3, 3), dilation_rate = (1, 1), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, data_format = 'channels_first')(permute1)
+	lstm2 = ConvLSTM2D(64, (3, 3), dilation_rate = (1, 1), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, go_backwards = True, data_format = 'channels_first')(lstm1)
+
+	lstm3 = ConvLSTM2D(64, (3, 3), dilation_rate = (2, 2), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, data_format = 'channels_first')(lstm2)
+	lstm4 = ConvLSTM2D(64, (3, 3), dilation_rate = (2, 2), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, go_backwards = True, data_format = 'channels_first')(lstm3)
+
+	lstm5 = ConvLSTM2D(64, (3, 3), dilation_rate = (4, 4), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, data_format = 'channels_first')(lstm4)
+	lstm6 = ConvLSTM2D(64, (3, 3), dilation_rate = (4, 4), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, go_backwards = True, data_format = 'channels_first')(lstm5)
+
+	lstm7 = ConvLSTM2D(64, (3, 3), dilation_rate = (8, 8), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, data_format = 'channels_first')(lstm6)
+	lstm8 = ConvLSTM2D(64, (3, 3), dilation_rate = (8, 8), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, go_backwards = True, data_format = 'channels_first')(lstm7)
+
+	lstm9 = ConvLSTM2D(64, (3, 3), dilation_rate = (16, 16), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, data_format = 'channels_first')(lstm8)
+	lstm10 = ConvLSTM2D(64, (3, 3), dilation_rate = (16, 16), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, go_backwards = True, data_format = 'channels_first')(lstm9)
+
+	lstm11 = ConvLSTM2D(64, (3, 3), dilation_rate = (32, 32), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, data_format = 'channels_first')(lstm10)
+	lstm12 = ConvLSTM2D(64, (3, 3), dilation_rate = (32, 32), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg), return_sequences = True, go_backwards = True, data_format = 'channels_first')(lstm11)
+
+	permute2 = Permute((2, 1, 3, 4))(lstm12)
+
+	model = Model(inputs = input1, outputs = permute2)
 	
+	return model

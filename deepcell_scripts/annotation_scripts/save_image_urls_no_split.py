@@ -17,12 +17,12 @@ import pandas as pd
 Create dataframe
 """
 
-cell_types = ["HEK293", "HeLa-S3", "MCF10A", "MouseBrain", "NIH-3T3", "RAW264.7"]
-list_of_number_of_sets = [3, 8, 1, 1, 3, 8]
-list_of_number_of_frames = [71, 45, 69, 41, 71, 45]
+# cell_types = ["HEK293", "HeLa-S3", "MCF10A", "MouseBrain", "NIH-3T3", "RAW264.7"]
+# list_of_number_of_sets = [3, 8, 1, 1, 3, 8]
+# list_of_number_of_frames = [71, 45, 69, 41, 71, 45]
 
 cell_types = ["MouseBrain"]
-list_of_number_of_sets = [2]
+list_of_number_of_sets = [7]
 list_of_number_of_frames = [30]
 
 for cell_type, number_of_sets, number_of_frames in zip(cell_types, list_of_number_of_sets, list_of_number_of_frames):
@@ -42,6 +42,6 @@ for cell_type, number_of_sets, number_of_frames in zip(cell_types, list_of_numbe
 
 		data = {'image_url': list_of_urls, 'cell_type': cell_type, 'set_number': set_number}
 		dataframe = pd.DataFrame(data=data)
-		csv_name = cell_type + '_' + data_type + '_' + set_number + '.csv'
+		csv_name = os.path.join('/data/training_data_csv/' + cell_type + '_' + data_type + '_' + set_number + '.csv')
 		dataframe.to_csv(csv_name, index = False)
 

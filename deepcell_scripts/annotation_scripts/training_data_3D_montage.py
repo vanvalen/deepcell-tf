@@ -24,10 +24,10 @@ Load images
 """
 
 cell_types = ["MouseBrain"]
-list_of_number_of_sets = [2]
+list_of_number_of_sets = [7]
 channel_names = ["nuclear"]
 
-base_direc = "/home/vanvalen/Data/training_data/nuclear/"
+base_direc = "/data/training_data/nuclear/"
 save_subdirec = "Montage"
 data_subdirec = "Processed"
 
