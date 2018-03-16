@@ -378,7 +378,7 @@ def discriminative_instance_loss(y_true, y_pred, delta_v = 0.5, delta_d = 1.5, o
 	diff_matrix = tf.subtract(mu_a, mu_b)
 	L_dist_1 = temp_norm(diff_matrix, axis = -1)
 	L_dist_2 = tf.square(tf.nn.relu(tf.constant(2*delta_d, dtype = K.floatx()) - L_dist_1))
-	diag = tf.constant(0, shape = [51], dtype = K.floatx())
+	diag = tf.constant(0, shape = [106], dtype = K.floatx())
 	L_dist_3 = tf.matrix_set_diag(L_dist_2, diag)
 	L_dist = tf.reduce_mean(L_dist_3)
 
@@ -413,7 +413,6 @@ def discriminative_instance_loss_3D(y_true, y_pred, delta_v = 0.5, delta_d = 1.5
 	mu_a = tf.expand_dims(mu, axis = 0)
 	mu_b = tf.expand_dims(mu, axis = 1)
 
-
 	diff_matrix = tf.subtract(mu_a, mu_b)
 	L_dist_1 = temp_norm(diff_matrix, axis = -1)
 	L_dist_2 = tf.square(tf.nn.relu(tf.constant(2*delta_d, dtype = K.floatx()) - L_dist_1))
@@ -424,7 +423,7 @@ def discriminative_instance_loss_3D(y_true, y_pred, delta_v = 0.5, delta_d = 1.5
 	# Compute regularization loss
 	L_reg = gamma * temp_norm(mu, axis = -1)
 
-	L = L_var + L_dist + L_reg
+	L =  L_var + L_dist + L_reg
 
 	return L
 
@@ -513,7 +512,10 @@ def get_data(file_name, mode = 'sample'):
 		labels = training_data["y"]
 		if mode == "conv_sample":
 			labels = training_data["y_sample"]
-		class_weights = training_data["class_weights"]
+		if mode == "conv" or mode == "conv_sample":
+			class_weights = training_data["class_weights"]
+		elif mode == "movie":
+			class_weights = None
 		win_x = training_data["win_x"]
 		win_y = training_data["win_y"]
 

@@ -8,13 +8,14 @@ Assortment of CNN architectures for single cell segmentation
 
 import numpy as np
 import tensorflow as tf
+import keras_resnet
 from tensorflow.contrib.keras import backend as K
 from tensorflow.contrib.keras.api.keras.models import Sequential, Model
-from tensorflow.contrib.keras.api.keras.layers import Add, Conv2D, MaxPool2D, AvgPool2D, Activation, Lambda, Flatten, Dense, BatchNormalization, Permute, Input, Concatenate
+from tensorflow.contrib.keras.api.keras.layers import Add, Conv2D, MaxPool2D, AvgPool2D, Conv3D, Activation, Lambda, Flatten, Dense, BatchNormalization, Permute, Input, Concatenate
 from tensorflow.contrib.keras.api.keras.regularizers import l2
 from tensorflow.contrib.keras.api.keras.callbacks import ModelCheckpoint
 from tensorflow.contrib.keras.api.keras.activations import softmax
-from deepcell import dilated_MaxPool2D, TensorProd2D, Resize, axis_softmax, Location
+from deepcell import dilated_MaxPool2D, TensorProd2D, TensorProd3D, Resize, axis_softmax, Location, Location3D
 
 """
 Batch normalized conv-nets
@@ -709,7 +710,7 @@ def bn_multires_pool_feature_net(input_shape = (2,1080,1280), n_features = 3, re
 
 	return model
 
-def bn_dense_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = True, location = False):
+def bn_dense_feature_net(input_shape = (2,1080,1280), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = True, location = True):
 	
 	if batch_shape is None:
 		input1 = Input(shape = input_shape)
@@ -1145,6 +1146,132 @@ def dilated_bn_feature_net_gather_61x61(input_shape = (2, 1080, 1280), training_
 """
 3D Conv-nets
 """
+
+def multires_block(input_tensor, init = 'he_normal', reg = 1e-5):
+	conv1 = Conv3D(1, (1,3,3), dilation_rate = (1,1,1), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input_tensor)
+	norm1 = BatchNormalization(axis=1)(conv1)
+	act1 = Activation('relu')(norm1)
+	merge1 = Concatenate(axis = 1)([input_tensor, act1])
+	
+	conv2 = Conv3D(1, (1,3,3), dilation_rate = (1,2,2), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge1)
+	norm2 = BatchNormalization(axis=1)(conv2)
+	act2 = Activation('relu')(norm2)
+	merge2 = Concatenate(axis = 1)([merge1, act2])
+	
+	conv3 = Conv3D(1, (1,3,3), dilation_rate = (1,4,4), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge2)
+	norm3 = BatchNormalization(axis=1)(conv3)
+	act3 = Activation('relu')(norm3)
+	merge3 = Concatenate(axis = 1)([merge2, act3])
+	
+	conv4 = Conv3D(1, (1,3,3), dilation_rate = (1,8,8), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge3)
+	norm4 = BatchNormalization(axis=1)(conv4)
+	act4 = Activation('relu')(norm4)
+	merge4 = Concatenate(axis=1)([merge3, act4])
+	
+	conv5 = Conv3D(1, (1,3,3), dilation_rate = (1,16,16), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge4)
+	norm5 = BatchNormalization(axis=1)(conv5)
+	act5 = Activation('relu')(norm5)
+	merge5 = Concatenate(axis=1)([merge4, act5])
+	
+	conv6 = Conv3D(1, (1,3,3), dilation_rate = (1,32,32), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge5)
+	norm6 = BatchNormalization(axis=1)(conv6)
+	act6 = Activation('relu')(norm6)
+	merge6 = Concatenate(axis=1)([merge5, act6])
+
+	return merge6
+
+def bn_dense_multires_feature_net_3D(batch_shape = (1, 1, 10, 256, 256), n_blocks = 10, n_features = 3, reg = 1e-5, init = 'he_normal', permute = True):
+	input1 = Input(batch_shape = batch_shape)
+	list_of_blocks = []
+	list_of_blocks += [multires_block(input1, init = init, reg = reg)]
+
+	for _ in xrange(n_blocks-1):
+		list_of_blocks += [multires_block(list_of_blocks[-1], init = init, reg = reg)]
+
+	tensor_prod1 = TensorProd3D(n_blocks*6 + batch_shape[1], 64, kernel_initializer = init, kernel_regularizer = l2(reg))(list_of_blocks[-1])
+	norm1 = BatchNormalization(axis = 1)(tensor_prod1)
+	act1 = Activation('relu')(norm1)
+
+	tensor_prod2 = TensorProd3D(64, 64, kernel_initializer = init, kernel_regularizer = l2(reg))(act1)
+	norm2 = BatchNormalization(axis = 1)(tensor_prod2)
+	act2 = Activation('relu')(norm2)
+
+	tensor_prod3 = TensorProd3D(64, n_features, kernel_initializer = init, kernel_regularizer = l2(reg))(act2)
+
+	if softmax:
+		tensor_prod3 = Activation(axis_softmax)(tensor_prod3)
+	
+	if permute:
+		final_layer = Permute((2,3,4,1))(tensor_prod3)
+	else:
+		final_layer = tensor_prod3
+
+	model = Model(inputs = input1, outputs = final_layer)
+
+	return model
+
+def bn_dense_feature_net_3D(batch_shape = (1, 1, 5, 256, 256), n_features = 3, reg = 1e-5, init = 'he_normal', location = True,  permute = True, softmax = True):	
+
+	input1 = Input(batch_shape = batch_shape)
+	input_shape = batch_shape[1:]
+
+	if location:
+		loc0 = Location3D(in_shape = batch_shape)(input1)
+		input2 = Concatenate(axis = 1)([input1, loc0])
+	else:
+		input2 = input1
+
+	conv1 = Conv3D(64, (5, 3, 3), dilation_rate = (1, 1, 1), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(input1)
+	norm1 = BatchNormalization(axis = 1)(conv1)
+	act1 = Activation('relu')(norm1)
+	merge1 = Concatenate(axis = 1)([input1, act1])
+
+	conv2 = Conv3D(64, (5, 3, 3), dilation_rate = (1, 2, 2), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge1)
+	norm2 = BatchNormalization(axis = 1)(conv2)
+	act2 = Activation('relu')(norm2)
+	merge2 = Concatenate(axis = 1)([merge1, act2])
+
+	conv3 = Conv3D(64, (5, 3, 3), dilation_rate = (1, 4, 4), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge2)
+	norm3 = BatchNormalization(axis = 1)(conv3)
+	act3 = Activation('relu')(norm3)
+	merge3 = Concatenate(axis = 1)([merge2, act3])
+
+	conv4 = Conv3D(64, (5, 3, 3), dilation_rate = (1, 8, 8), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge3)
+	norm4 = BatchNormalization(axis = 1)(conv4)
+	act4 = Activation('relu')(norm4)
+	merge4 = Concatenate(axis = 1)([merge3, act4])
+
+	conv5 = Conv3D(64, (5, 3, 3), dilation_rate = (1, 16, 16), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge4)
+	norm5 = BatchNormalization(axis = 1)(conv5)
+	act5 = Activation('relu')(norm5)
+	merge5 = Concatenate(axis = 1)([merge4, act5])
+
+	conv6 = Conv3D(64, (5, 3, 3), dilation_rate = (1, 32, 32), kernel_initializer = init, padding = 'same', kernel_regularizer = l2(reg))(merge5)
+	norm6 = BatchNormalization(axis = 1)(conv6)
+	act6 = Activation('relu')(norm6)
+	merge6 = Concatenate(axis = 1)([merge5, act6])
+
+	tensor_prod1 = TensorProd3D(64*6 + input_shape[0], 256, kernel_initializer = init, kernel_regularizer = l2(reg))(merge6)
+	norm7 = BatchNormalization(axis = 1)(tensor_prod1)
+	act7 = Activation('relu')(norm7)
+
+	tensor_prod2 = TensorProd3D(256, 256, kernel_initializer = init, kernel_regularizer = l2(reg))(act7)
+	norm8 = BatchNormalization(axis = 1)(tensor_prod2)
+	act8 = Activation('relu')(norm8)
+
+	tensor_prod3 = TensorProd3D(256, n_features, kernel_initializer = init, kernel_regularizer = l2(reg))(act8)
+
+	if softmax:
+		tensor_prod3 = Activation(axis_softmax)(tensor_prod3)
+	
+	if permute:
+		final_layer = Permute((2,3,4,1))(tensor_prod3)
+	else:
+		final_layer = tensor_prod3
+
+	model = Model(inputs = input1, outputs = final_layer)
+
+	return model
 
 def bn_dense_feature_net_lstm(input_shape = (1, 60, 256, 256), batch_shape = None, n_features = 3, reg = 1e-5, init = 'he_normal', permute = False, softmax = True):	
 	if batch_shape is None:

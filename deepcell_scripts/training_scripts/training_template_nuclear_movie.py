@@ -12,8 +12,8 @@ Run command:
 from __future__ import print_function
 from tensorflow.python.keras.optimizers import SGD, RMSprop, Adam
 
-from deepcell import rate_scheduler, train_model_conv as train_model
-from deepcell import bn_dense_net_3D as the_model
+from deepcell import rate_scheduler, train_model_movie as train_model
+from deepcell import bn_dense_feature_net_3D as the_model
 from deepcell import get_images_from_directory, process_image
 
 import os
@@ -22,9 +22,9 @@ import numpy as np
 from scipy.misc import imsave
 
 batch_size = 1
-n_epoch = 200
+n_epoch = 50
 
-dataset = "nuclear_movie"
+dataset = "nuclear_movie_disc_same"
 expt = "bn_dense_net_3D"
 
 direc_save = "/data/trained_networks/nuclear_movie/"
@@ -35,18 +35,15 @@ lr_sched = rate_scheduler(lr = 1e-2, decay = 0.99)
 
 file_name = os.path.join(direc_data, dataset + ".npz")
 training_data = np.load(file_name)
-class_weights = training_data["class_weights"]
-print(class_weights)
 
 for iterate in xrange(1):
 
-	model = the_model(input_shape = (1,60,256,256), n_features = 3, reg = 1e-5, permute = True)
+	model = the_model(batch_shape = (1,1,5,256,256), n_features = 3, reg = 1e-5, location = False, permute = True, softmax = False)
 
 	trained_model = train_model(model = model, dataset = dataset, optimizer = optimizer, 
 		expt = expt, it = iterate, batch_size = batch_size, n_epoch = n_epoch,
-		direc_save = direc_save, direc_data = direc_data, 
-		lr_sched = lr_sched, class_weight = class_weights,
-		rotation_range = 180, flip = True, shear = False)
+		direc_save = direc_save, direc_data = direc_data, number_of_frames = 5,
+		lr_sched = lr_sched, rotation_range = 180, flip = True, shear = False)
 
 
 

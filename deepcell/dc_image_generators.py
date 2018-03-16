@@ -834,12 +834,12 @@ class MovieDataGenerator(object):
 							 'a tuple or list of two floats. '
 							 'Received arg: ', zoom_range)
 
-	def flow(self, train_dict, batch_size=1, shuffle=True, seed=None,
+	def flow(self, train_dict, batch_size=1, number_of_frames = 10, shuffle=True, seed=None,
 			save_to_dir=None, save_prefix='', save_format='png'):
 		return MovieArrayIterator(
 			train_dict, self,
 			batch_size=batch_size, shuffle=shuffle, seed=seed,
-			data_format=self.data_format,
+			data_format=self.data_format, number_of_frames = number_of_frames,
 			save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
 
 	def standardize(self, x):
@@ -1035,7 +1035,7 @@ class MovieArrayIterator(Iterator):
 
 	def __init__(self, train_dict, movie_data_generator,
 				 batch_size=32, shuffle=False, seed=None,
-				 data_format = None,
+				 data_format = None, number_of_frames = 10,
 				 save_to_dir=None, save_prefix='', save_format='png'):
 
 		# The movie array iterator takes in a dictionary containing the training data
@@ -1043,7 +1043,7 @@ class MovieArrayIterator(Iterator):
 		# The label movie is the same dimension as the channel movie with each pixel 
 		# having its corresponding prediction
 
-		if train_dict["labels"] is not None and train_dict["channels"].shape != train_dict["labels"].shape:
+		if train_dict["labels"] is not None and train_dict["channels"].shape[0] != train_dict["labels"].shape[0]:
 			raise Exception('Data movie and label movie should have the same size'
 							'Found data movie size = %s and and label movie size = %s' %(train_dict["channels"].shape, train_dict["labels"].shape)
 				)
@@ -1056,9 +1056,16 @@ class MovieArrayIterator(Iterator):
 							'should have rank 5. You passed an array '
 							'with shape', self.x.shape)
 		channels_axis = 4 if data_format == 'channels_last' else 1
+		time_axis = 1 if data_format == 'channels_last' else 2
+
+		if self.x.shape[time_axis] - number_of_frames < 0:
+			raise Exception('The number of frames used in each training batch should' 
+				'be less than the number of frames in the training data!')
+
 		self.channels_axis = channels_axis
+		self.time_axis = time_axis
+		self.number_of_frames = number_of_frames
 		self.y = train_dict["labels"]
-		self.b = train_dict["batch"]
 		self.movie_data_generator = movie_data_generator
 		self.data_format = data_format
 		self.save_to_dir = save_to_dir
@@ -1072,17 +1079,37 @@ class MovieArrayIterator(Iterator):
 		# and the label movie
 
 		index_array = index_array[0]
-		batch_x = np.zeros(tuple([len(index_array)] + [self.x.shape[1:]]))
+		if self.channels_axis == 1:
+			batch_x = np.zeros(tuple([len(index_array), self.x.shape[1], self.number_of_frames] + list(self.x.shape[3:])))
+			if self.y is not None:
+				batch_y = np.zeros(tuple([len(index_array), self.y.shape[1], self.number_of_frames] + list(self.y.shape[3:])))
+
+		elif self.channels_axis == 4:
+			batch_x = np.zeros(tuple([len(index_array), self.number_of_frames] + list(self.x.shape[2:])))
+			if self.y is not None:
+				batch_y = np.zeros(tuple([len(index_array), self.number_of_frames] + list(self.y.shape[2:])))
+
 
 		for i, j in enumerate(index_array):
-			batch = self.b[j]
-			x = self.x[batch,:,:,:,:]
+			batch = j
 
 			if self.y is not None:
-				y = self.y[batch,:,:,:]
+				y = self.y[batch,:,:,:,:]
+			
+			# Sample along the time axis
+			time_start = np.random.randint(0, high = self.x.shape[self.time_axis] - self.number_of_frames)
+			if self.time_axis == 1:
+				x = self.x[batch,time_start:time_start+self.number_of_frames,:,:,:]
+				if self.y is not None:
+					y = self.y[batch,time_start:time_start+self.number_of_frames,:,:,:]
 
+			elif self.time_axis == 2:
+				x = self.x[batch,:,time_start:time_start+self.number_of_frames,:,:]
+				if self.y is not None:
+					y = self.y[batch,:,time_start:time_start+self.number_of_frames,:,:]
+			
 			if self.y is not None:
-				x, y = self.movie_data_generator.random_transform(x.astype(K.floatx()), labels_movie = y)
+				x, y = self.movie_data_generator.random_transform(x.astype(K.floatx()), label_movie = y)
 				x = self.movie_data_generator.standardize(x)
 				batch_y[i] = y
 			else:
@@ -1106,6 +1133,7 @@ class MovieArrayIterator(Iterator):
 		if self.y is None:
 			return batch_x
 		else:
+			batch_y = np.rollaxis(batch_y, 1, 5)
 			return batch_x, batch_y
 
 	def next(self):
@@ -1121,11 +1149,167 @@ class MovieArrayIterator(Iterator):
 			# so it can be done in parallel
 		return self._get_batches_of_transformed_samples(index_array)
 
-class MovieDataGenerator(ImageDataGenerator):
-	def movie_flow(self, train_dict, batch_size=32, shuffle=True, seed=None,
-			save_to_dir=None, save_prefix='', save_format='png'):
-		return MovieArrayIterator(
-			train_dict, self,
-			batch_size=batch_size, shuffle=shuffle, seed=seed,
-			data_format=self.data_format,
-			save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
+"""
+Bounding box generators adapted from retina net library
+"""
+
+class BoundingBoxIterator(Iterator):
+	def __init__(self, train_dict, image_data_generator,
+				 batch_size=1, shuffle=False, seed=None,
+				 data_format = None,
+				 save_to_dir=None, save_prefix='', save_format='png'):
+		print train_dict.keys()
+		self.x = np.asarray(train_dict["channels"], dtype = K.floatx())
+		self.win_x = train_dict["win_x"]
+		self.win_y = train_dict["win_y"]
+		
+		if data_format is None:
+			data_format = K.image_dim_ordering()
+
+		if self.x.ndim != 4:
+			raise ValueError('Input data in `NumpyArrayIterator` '
+							'should have rank 4. You passed an array '
+							'with shape', self.x.shape)
+
+		channels_axis = 3 if data_format == 'channels_last' else 1
+		self.channels_axis = channels_axis
+		self.y = train_dict["labels"]
+
+		if self.channel_axis == 3:
+			self.num_features = self.y.shape[-1]
+		else:
+			self.num_features = self.y.shape[1]
+
+		if self.channel_axis == 3:
+			self.image_shape = self.x.shape[1:2]
+		else:
+			self.image_shape = self.x.shape[2:]
+
+		bbox_list = []
+		for b in xrange(channels.shape[0]):
+			for l in xrange(1,self.num_features-1):
+				if self.channel_axis == 3:
+					mask = self.y[b,:,:,l]
+				else:
+					mask = self.y[b,l,:,:]
+				props = regionprops(label(mask))
+				bboxes = [np.array(list(prop.bbox) + list(l)) for prop in props]
+				bboxes = np.concatenate(bboxes, axis = 0)
+			bbox_list += [bboxes]
+		self.bbox_list = bbox_list
+
+		self.image_data_generator = image_data_generator
+		self.data_format = data_format
+		self.save_to_dir = save_to_dir
+		self.save_prefix = save_prefix
+		self.save_format = save_format
+		super(ImageFullyConvIterator, self).__init__(self.x.shape[0], batch_size, shuffle, seed)
+
+	def get_annotations(y):
+		for l in xrange(1,self.num_features-1):
+			if self.channel_axis == 3:
+				mask = self.y[:,:,l]
+			else:
+				mask = self.y[l,:,:]
+			props = regionprops(label(mask))
+			bboxes = [np.array(list(prop.bbox) + list(l)) for prop in props]
+			bboxes = np.concatenate(bboxes, axis = 0)
+		return bboxes
+
+	def anchor_targets(
+		self,
+		image_shape,
+		annotations,
+		num_classes,
+		mask_shape=None,
+		negative_overlap=0.4,
+		positive_overlap=0.5,
+		**kwargs):
+		return anchor_targets_bbox(image_shape, annotations, num_classes, mask_shape, negative_overlap, positive_overlap, **kwargs)
+
+	def compute_target(self, annotation):
+		labels, annotations, anchors = self.anchor_targets(self.image_shape, annotation, self.num_features)
+		regression = bbox_transform(anchors, annotation)
+
+		# append anchor state to regression targets
+		anchor_states = np.max(labels, axis = 1, keepdims = True)
+		regression = np.append(regression, anchor_states, axis = 1)
+
+		return [regressions, labels]
+
+
+	def _get_batches_of_transformed_samples(self, index_array):
+		index_array = index_array[0]
+		if self.channels_axis == 1:
+			batch_x = np.zeros(tuple([len(index_array)] + [self.x.shape[1], self.x.shape[2], self.x.shape[3]]))
+			if self.y is not None:
+				batch_y = np.zeros(tuple([len(index_array)] + [self.y.shape[1], self.y.shape[2], self.y.shape[3]]))
+		else:
+			batch_x = np.zeros(tuple([len(index_array)] + [self.x.shape[2], self.x.shape[3]] + [self.x.shape[1]]))
+			if self.y is not None:
+				batch_y = np.zeros(tuple([len(index_array)] + [self.y.shape[2], self.y.shape[3]] + [self.y.shape[1]]))
+
+		regressions_list = []
+		labels_list = []
+
+		for i, j in enumerate(index_array):
+			batch = j
+
+			x = self.x[batch,:,:,:]
+
+			if self.y is not None:
+				y = self.y[batch,:,:,:]
+
+			if self.y is not None:
+				x, y = self.image_data_generator.random_transform(x.astype(K.floatx()), y)
+			else:
+				x = self.image_data_generator.random_transform(x.astype(K.floatx()))
+
+			x = self.image_data_generator.standardize(x)
+
+			if self.channels_axis == 1:
+				batch_x[i] = x
+				batch_y[i] = y
+
+				# Get the bounding boxes from the transformed masks!
+
+				annotations = self.get_annotations[y]
+				regressions, labels = self.compute_target(annotations)
+				regressions_list += [regressions]
+				labels_list += [labels]
+
+			if self.channels_axis == 3:
+				raise NotImplementedError('Bounding box generator does not work for channels last yet')
+
+			regressions = np.stack(regressions_list, axis = 0)
+			labels = np.stack(labels_list, axis = 0)
+
+		if self.save_to_dir:
+			for i, j in enumerate(index_array):
+				img = array_to_img(batch_x[i], self.data_format, scale=True)
+				fname = '{prefix}_{index}_{hash}.{format}'.format(prefix=self.save_prefix,
+																	index=j,
+																	hash=np.random.randint(1e4),
+																	format=self.save_format)
+				img.save(os.path.join(self.save_to_dir, fname))
+
+
+		if self.y is None:
+			return batch_x
+		else:
+			batch_y = np.rollaxis(batch_y, 1, 4)
+			return batch_x, [regressions_list, labels_list]
+
+	def next(self):
+		"""For python 2.x.
+		# Returns the next batch.
+		"""
+		
+		# Keeps under lock only the mechanism which advances
+		# the indexing of each batch.
+		with self.lock:
+			index_array = next(self.index_generator)
+			# The transformation of images is not under thread lock
+			# so it can be done in parallel
+		return self._get_batches_of_transformed_samples(index_array)
+
