@@ -590,3 +590,383 @@ def flip_axis(x, axis):
 	return x
 
 
+"""
+Tensorflow functions from Retina-net library
+"""
+
+class retina_net_tensorflow_backend(object):
+	def __init__(self):
+		return None
+
+	def top_k(*args, **kwargs):
+		return tf.nn.top_k(*args, **kwargs)
+
+
+	def resize_images(*args, **kwargs):
+		return tf.image.resize_images(*args, **kwargs)
+
+
+	def non_max_suppression(*args, **kwargs):
+		return tf.image.non_max_suppression(*args, **kwargs)
+
+
+	def range(*args, **kwargs):
+		return tf.range(*args, **kwargs)
+
+
+	def gather_nd(*args, **kwargs):
+		return tf.gather_nd(*args, **kwargs)
+
+
+	def meshgrid(*args, **kwargs):
+		return tf.meshgrid(*args, **kwargs)
+
+
+	def where(*args, **kwargs):
+		return tf.where(*args, **kwargs)
+
+"""
+Anchor functions from the Retina-net library
+"""
+
+def anchor_targets_bbox(
+	image_shape,
+	annotations,
+	num_classes,
+	mask_shape=None,
+	negative_overlap=0.4,
+	positive_overlap=0.5,
+	**kwargs
+):
+	anchors = anchors_for_shape(image_shape, **kwargs)
+
+	# label: 1 is positive, 0 is negative, -1 is dont care
+	labels = np.ones((anchors.shape[0], num_classes)) * -1
+
+	if annotations.shape[0]:
+		# obtain indices of gt annotations with the greatest overlap
+		overlaps             = compute_overlap(anchors, annotations[:, :4])
+		argmax_overlaps_inds = np.argmax(overlaps, axis=1)
+		max_overlaps         = overlaps[np.arange(overlaps.shape[0]), argmax_overlaps_inds]
+
+		# assign bg labels first so that positive labels can clobber them
+		labels[max_overlaps < negative_overlap, :] = 0
+
+		# compute box regression targets
+		annotations = annotations[argmax_overlaps_inds]
+
+		# fg label: above threshold IOU
+		positive_indices = max_overlaps >= positive_overlap
+		labels[positive_indices, :] = 0
+		labels[positive_indices, annotations[positive_indices, 4].astype(int)] = 1
+	else:
+		# no annotations? then everything is background
+		labels[:] = 0
+		annotations = np.zeros_like(anchors)
+
+	# ignore annotations outside of image
+	mask_shape         = image_shape if mask_shape is None else mask_shape
+	anchors_centers    = np.vstack([(anchors[:, 0] + anchors[:, 2]) / 2, (anchors[:, 1] + anchors[:, 3]) / 2]).T
+	indices            = np.logical_or(anchors_centers[:, 0] >= mask_shape[1], anchors_centers[:, 1] >= mask_shape[0])
+	labels[indices, :] = -1
+
+	return labels, annotations, anchors
+
+
+def anchors_for_shape(
+	image_shape,
+	pyramid_levels=None,
+	ratios=None,
+	scales=None,
+	strides=None,
+	sizes=None
+):
+	if pyramid_levels is None:
+		pyramid_levels = [3, 4, 5, 6, 7]
+	if strides is None:
+		strides = [2 ** x for x in pyramid_levels]
+	if sizes is None:
+		sizes = [2 ** (x + 2) for x in pyramid_levels]
+	if ratios is None:
+		ratios = np.array([0.5, 1, 2])
+	if scales is None:
+		scales = np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)])
+
+	# skip the first two levels
+	image_shape = np.array(image_shape[:2])
+	for i in range(pyramid_levels[0] - 1):
+		image_shape = (image_shape + 1) // 2
+
+	# compute anchors over all pyramid levels
+	all_anchors = np.zeros((0, 4))
+	for idx, p in enumerate(pyramid_levels):
+		image_shape     = (image_shape + 1) // 2
+		anchors         = generate_anchors(base_size=sizes[idx], ratios=ratios, scales=scales)
+		shifted_anchors = shift(image_shape, strides[idx], anchors)
+		all_anchors     = np.append(all_anchors, shifted_anchors, axis=0)
+
+	return all_anchors
+
+
+def shift(shape, stride, anchors):
+	shift_x = (np.arange(0, shape[1]) + 0.5) * stride
+	shift_y = (np.arange(0, shape[0]) + 0.5) * stride
+
+	shift_x, shift_y = np.meshgrid(shift_x, shift_y)
+
+	shifts = np.vstack((
+		shift_x.ravel(), shift_y.ravel(),
+		shift_x.ravel(), shift_y.ravel()
+	)).transpose()
+
+	# add A anchors (1, A, 4) to
+	# cell K shifts (K, 1, 4) to get
+	# shift anchors (K, A, 4)
+	# reshape to (K*A, 4) shifted anchors
+	A = anchors.shape[0]
+	K = shifts.shape[0]
+	all_anchors = (anchors.reshape((1, A, 4)) + shifts.reshape((1, K, 4)).transpose((1, 0, 2)))
+	all_anchors = all_anchors.reshape((K * A, 4))
+
+	return all_anchors
+
+
+def generate_anchors(base_size=16, ratios=None, scales=None):
+	"""
+	Generate anchor (reference) windows by enumerating aspect ratios X
+	scales w.r.t. a reference window.
+	"""
+
+	if ratios is None:
+		ratios = np.array([0.5, 1, 2])
+
+	if scales is None:
+		scales = np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)])
+
+	num_anchors = len(ratios) * len(scales)
+
+	# initialize output anchors
+	anchors = np.zeros((num_anchors, 4))
+
+	# scale base_size
+	anchors[:, 2:] = base_size * np.tile(scales, (2, len(ratios))).T
+
+	# compute areas of anchors
+	areas = anchors[:, 2] * anchors[:, 3]
+
+	# correct for ratios
+	anchors[:, 2] = np.sqrt(areas / np.repeat(ratios, len(scales)))
+	anchors[:, 3] = anchors[:, 2] * np.repeat(ratios, len(scales))
+
+	# transform from (x_ctr, y_ctr, w, h) -> (x1, y1, x2, y2)
+	anchors[:, 0::2] -= np.tile(anchors[:, 2] * 0.5, (2, 1)).T
+	anchors[:, 1::2] -= np.tile(anchors[:, 3] * 0.5, (2, 1)).T
+
+	return anchors
+
+
+def bbox_transform(anchors, gt_boxes, mean=None, std=None):
+	"""Compute bounding-box regression targets for an image."""
+
+	if mean is None:
+		mean = np.array([0, 0, 0, 0])
+	if std is None:
+		std = np.array([0.1, 0.1, 0.2, 0.2])
+
+	if isinstance(mean, (list, tuple)):
+		mean = np.array(mean)
+	elif not isinstance(mean, np.ndarray):
+		raise ValueError('Expected mean to be a np.ndarray, list or tuple. Received: {}'.format(type(mean)))
+
+	if isinstance(std, (list, tuple)):
+		std = np.array(std)
+	elif not isinstance(std, np.ndarray):
+		raise ValueError('Expected std to be a np.ndarray, list or tuple. Received: {}'.format(type(std)))
+
+	anchor_widths  = anchors[:, 2] - anchors[:, 0] + 1.0
+	anchor_heights = anchors[:, 3] - anchors[:, 1] + 1.0
+	anchor_ctr_x   = anchors[:, 0] + 0.5 * anchor_widths
+	anchor_ctr_y   = anchors[:, 1] + 0.5 * anchor_heights
+
+	gt_widths  = gt_boxes[:, 2] - gt_boxes[:, 0] + 1.0
+	gt_heights = gt_boxes[:, 3] - gt_boxes[:, 1] + 1.0
+	gt_ctr_x   = gt_boxes[:, 0] + 0.5 * gt_widths
+	gt_ctr_y   = gt_boxes[:, 1] + 0.5 * gt_heights
+
+	targets_dx = (gt_ctr_x - anchor_ctr_x) / anchor_widths
+	targets_dy = (gt_ctr_y - anchor_ctr_y) / anchor_heights
+	targets_dw = np.log(gt_widths / anchor_widths)
+	targets_dh = np.log(gt_heights / anchor_heights)
+
+	targets = np.stack((targets_dx, targets_dy, targets_dw, targets_dh))
+	targets = targets.T
+
+	targets = (targets - mean) / std
+
+	return targets
+
+
+def compute_overlap(a, b):
+	"""
+	Parameters
+	----------
+	a: (N, 4) ndarray of float
+	b: (K, 4) ndarray of float
+	Returns
+	-------
+	overlaps: (N, K) ndarray of overlap between boxes and query_boxes
+	"""
+	area = (b[:, 2] - b[:, 0] + 1) * (b[:, 3] - b[:, 1] + 1)
+
+	iw = np.minimum(np.expand_dims(a[:, 2], axis=1), b[:, 2]) - np.maximum(np.expand_dims(a[:, 0], 1), b[:, 0]) + 1
+	ih = np.minimum(np.expand_dims(a[:, 3], axis=1), b[:, 3]) - np.maximum(np.expand_dims(a[:, 1], 1), b[:, 1]) + 1
+
+	iw = np.maximum(iw, 0)
+	ih = np.maximum(ih, 0)
+
+	ua = np.expand_dims((a[:, 2] - a[:, 0] + 1) * (a[:, 3] - a[:, 1] + 1), axis=1) + area - iw * ih
+
+	ua = np.maximum(ua, np.finfo(float).eps)
+
+	intersection = iw * ih
+
+	return intersection / ua
+
+"""
+Initializers from Retina-net library
+"""
+
+class PriorProbability(keras.initializers.Initializer):
+	"""
+	Initializer applies a prior probability.
+	"""
+
+	def __init__(self, probability=0.01):
+		self.probability = probability
+
+	def get_config(self):
+		return {
+			'probability': self.probability
+		}
+
+	def __call__(self, shape, dtype=None):
+		# set bias to -log((1 - p)/p) for foregound
+		result = np.ones(shape, dtype=dtype) * -math.log((1 - self.probability) / self.probability)
+
+		return result
+
+"""
+Loss functions from Retina-net library
+"""
+
+def focal(alpha=0.25, gamma=2.0):
+	def _focal(y_true, y_pred):
+
+		backend = retina_net_tensorflow_backend()
+
+		labels         = y_true
+		classification = y_pred
+
+		# compute the divisor: for each image in the batch, we want the number of positive anchors
+
+		# override the -1 labels, since we treat values -1 and 0 the same way for determining the divisor
+		divisor = backend.where(keras.backend.less_equal(labels, 0), K.zeros_like(labels), labels)
+		divisor = K.max(divisor, axis=2, keepdims=True)
+		divisor = K.cast(divisor, K.floatx())
+
+		# compute the number of positive anchors
+		divisor = K.sum(divisor, axis=1, keepdims=True)
+
+		#  ensure we do not divide by 0
+		divisor = K.maximum(1.0, divisor)
+
+		# compute the focal loss
+		alpha_factor = K.ones_like(labels) * alpha
+		alpha_factor = backend.where(K.equal(labels, 1), alpha_factor, 1 - alpha_factor)
+		focal_weight = backend.where(K.equal(labels, 1), 1 - classification, classification)
+		focal_weight = alpha_factor * focal_weight ** gamma
+
+		cls_loss = focal_weight * K.binary_crossentropy(labels, classification)
+
+		# normalise by the number of positive anchors for each entry in the minibatch
+		cls_loss = cls_loss / divisor
+
+		# filter out "ignore" anchors
+		anchor_state = K.max(labels, axis=2)  # -1 for ignore, 0 for background, 1 for object
+		indices      = backend.where(K.not_equal(anchor_state, -1))
+
+		cls_loss = backend.gather_nd(cls_loss, indices)
+
+		# divide by the size of the minibatch
+		return K.sum(cls_loss) / K.cast(K.shape(labels)[0], K.floatx())
+
+	return _focal
+
+
+def smooth_l1(sigma=3.0):
+	sigma_squared = sigma ** 2
+
+	def _smooth_l1(y_true, y_pred):
+
+		backend = retina_net_tensorflow_backend()
+
+		# separate target and state
+		regression        = y_pred
+		regression_target = y_true[:, :, :4]
+		anchor_state      = y_true[:, :, 4]
+
+		# compute the divisor: for each image in the batch, we want the number of positive and negative anchors
+		divisor = backend.where(K.equal(anchor_state, 1), K.ones_like(anchor_state), K.zeros_like(anchor_state))
+		divisor = K.sum(divisor, axis=1, keepdims=True)
+		divisor = K.maximum(1.0, divisor)
+
+		# pad the tensor to have shape (batch_size, 1, 1) for future division
+		divisor   = K.expand_dims(divisor, axis=2)
+
+		# compute smooth L1 loss
+		# f(x) = 0.5 * (sigma * x)^2          if |x| < 1 / sigma / sigma
+		#        |x| - 0.5 / sigma / sigma    otherwise
+		regression_diff = regression - regression_target
+		regression_diff = K.abs(regression_diff)
+		regression_loss = backend.where(
+			K.less(regression_diff, 1.0 / sigma_squared),
+			0.5 * sigma_squared * K.pow(regression_diff, 2),
+			regression_diff - 0.5 / sigma_squared
+		)
+
+		# normalise by the number of positive and negative anchors for each entry in the minibatch
+		regression_loss = regression_loss / divisor
+
+		# filter out "ignore" anchors
+		indices         = backend.where(K.equal(anchor_state, 1))
+		regression_loss = backend.gather_nd(regression_loss, indices)
+
+		# divide by the size of the minibatch
+		regression_loss = K.sum(regression_loss) / K.cast(K.shape(y_true)[0], K.floatx())
+
+		return regression_loss
+
+	return _smooth_l1
+
+"""
+Initializers from Retina-net library
+"""
+
+class PriorProbability(initializers.Initializer):
+	"""
+	Initializer applies a prior probability.
+	"""
+
+	def __init__(self, probability=0.01):
+		self.probability = probability
+
+	def get_config(self):
+		return {
+			'probability': self.probability
+		}
+
+	def __call__(self, shape, dtype=None):
+		# set bias to -log((1 - p)/p) for foregound
+		result = np.ones(shape, dtype=dtype) * -math.log((1 - self.probability) / self.probability)
+
+		return result

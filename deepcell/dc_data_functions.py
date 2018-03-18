@@ -409,26 +409,7 @@ def make_training_data(max_training_examples = 1e7, window_size_x = 30, window_s
 
 		# Save training data in npz format
 		np.savez(file_name_save, class_weights = weights, channels = channels, y  = feature_mask, y_sample = feature_mask_sample, win_x = window_size_x, win_y = window_size_y)
-	
-	if output_mode == "bbox":
-
-		if border_mode == "valid":
-			feature_mask = feature_mask_trimmed
-
-		# Create list of bbox's for each image
-		bbox_list = []
-		for b in xrange(channels.shape[0]):
-			for l in xrange(1,feature_mask.shape[1]-1):
-				mask = feature_mask[b,l,:,:]
-				props = regionprops(label(mask))
-				bboxes = [np.array(list(prop.bbox) + list(l)) for prop in props]
-				bboxes = np.concatenate(bboxes, axis = 0)
-			bbox_list += [bboxes]
-
-		# Save training data in npz format
-		np.savez(file_name_save, channels = channels, bbox_list = bbox_list)
 				
-
 	if output_mode == "disc":
 
 		if feature_mask.shape[1] > 3:
