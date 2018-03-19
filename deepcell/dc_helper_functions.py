@@ -16,6 +16,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import shelve
 from contextlib import closing
+import math
 
 import os
 import glob
@@ -546,6 +547,44 @@ def get_data(file_name, mode = 'sample'):
 
 		return train_dict, (test_imgs, test_labels)
 
+	elif mode == "bbox":
+		training_data = np.load(file_name)
+		channels = training_data["channels"]
+		labels = training_data["y"]
+		if mode == "conv_sample":
+			labels = training_data["y_sample"]
+		if mode == "conv" or mode == "conv_sample":
+			class_weights = training_data["class_weights"]
+		elif mode == "movie":
+			class_weights = None
+		win_x = training_data["win_x"]
+		win_y = training_data["win_y"]
+
+		total_batch_size = channels.shape[0]
+		num_test = np.int32(np.ceil(np.float(total_batch_size)/10))
+		num_train = np.int32(total_batch_size - num_test)
+		full_batch_size = np.int32(num_test + num_train)
+
+		print total_batch_size, num_test, num_train
+
+		"""
+		Split data set into training data and validation data
+		"""
+		arr = np.arange(total_batch_size)
+		arr_shuff = np.random.permutation(arr)
+
+		train_ind = arr_shuff[0:num_train]
+		test_ind = arr_shuff[num_train:]
+
+		train_imgs, train_labels = data_generator(channels, train_ind, labels = labels, mode = "conv")
+		test_imgs, test_labels = data_generator(channels, test_ind, labels = labels, mode = "conv")
+
+		# test_labels = np.moveaxis(test_labels, 1, 3)
+		train_dict = {"channels": train_imgs, "labels": train_labels, "win_x": win_x, "win_y": win_y}
+		val_dict = {"channels": test_imgs, "labels": test_labels, "win_x": win_x, "win_y": win_y}
+
+		return train_dict, val_dict
+
 	elif mode == 'conv_gather':
 		training_data = np.load(file_name)
 		channels = training_data["channels"]
@@ -598,32 +637,84 @@ class retina_net_tensorflow_backend(object):
 	def __init__(self):
 		return None
 
-	def top_k(*args, **kwargs):
+	def top_k(self, *args, **kwargs):
 		return tf.nn.top_k(*args, **kwargs)
 
-
-	def resize_images(*args, **kwargs):
+	def resize_images(self, *args, **kwargs):
 		return tf.image.resize_images(*args, **kwargs)
 
-
-	def non_max_suppression(*args, **kwargs):
+	def non_max_suppression(self, *args, **kwargs):
 		return tf.image.non_max_suppression(*args, **kwargs)
 
-
-	def range(*args, **kwargs):
+	def range(self, *args, **kwargs):
 		return tf.range(*args, **kwargs)
 
-
-	def gather_nd(*args, **kwargs):
+	def gather_nd(self, *args, **kwargs):
 		return tf.gather_nd(*args, **kwargs)
 
-
-	def meshgrid(*args, **kwargs):
+	def meshgrid(self, *args, **kwargs):
 		return tf.meshgrid(*args, **kwargs)
 
-
-	def where(*args, **kwargs):
+	def where(self, *args, **kwargs):
 		return tf.where(*args, **kwargs)
+
+	def shift(self, shape, stride, anchors):
+		"""
+		Produce shifted anchors based on shape of the map and stride size
+		"""
+		shift_x = (K.arange(0, shape[1], dtype=K.floatx()) + K.constant(0.5, dtype=K.floatx())) * stride
+		shift_y = (K.arange(0, shape[0], dtype=K.floatx()) + K.constant(0.5, dtype=K.floatx())) * stride
+
+		shift_x, shift_y = self.meshgrid(shift_x, shift_y)
+		shift_x = K.reshape(shift_x, [-1])
+		shift_y = K.reshape(shift_y, [-1])
+
+		shifts = K.stack([
+			shift_x,
+			shift_y,
+			shift_x,
+			shift_y
+		], axis=0)
+
+		shifts            = K.transpose(shifts)
+		number_of_anchors = K.shape(anchors)[0]
+
+		k = K.shape(shifts)[0]  # number of base points = feat_h * feat_w
+
+		shifted_anchors = K.reshape(anchors, [1, number_of_anchors, 4]) + K.cast(K.reshape(shifts, [k, 1, 4]), K.floatx())
+		shifted_anchors = K.reshape(shifted_anchors, [k * number_of_anchors, 4])
+
+		return shifted_anchors
+
+	def bbox_transform_inv(self, boxes, deltas, mean=None, std=None):
+		if mean is None:
+			mean = [0, 0, 0, 0]
+		if std is None:
+			std = [0.1, 0.1, 0.2, 0.2]
+
+		widths  = boxes[:, :, 2] - boxes[:, :, 0]
+		heights = boxes[:, :, 3] - boxes[:, :, 1]
+		ctr_x   = boxes[:, :, 0] + 0.5 * widths
+		ctr_y   = boxes[:, :, 1] + 0.5 * heights
+
+		dx = deltas[:, :, 0] * std[0] + mean[0]
+		dy = deltas[:, :, 1] * std[1] + mean[1]
+		dw = deltas[:, :, 2] * std[2] + mean[2]
+		dh = deltas[:, :, 3] * std[3] + mean[3]
+
+		pred_ctr_x = ctr_x + dx * widths
+		pred_ctr_y = ctr_y + dy * heights
+		pred_w     = keras.backend.exp(dw) * widths
+		pred_h     = keras.backend.exp(dh) * heights
+
+		pred_boxes_x1 = pred_ctr_x - 0.5 * pred_w
+		pred_boxes_y1 = pred_ctr_y - 0.5 * pred_h
+		pred_boxes_x2 = pred_ctr_x + 0.5 * pred_w
+		pred_boxes_y2 = pred_ctr_y + 0.5 * pred_h
+
+		pred_boxes = keras.backend.stack([pred_boxes_x1, pred_boxes_y1, pred_boxes_x2, pred_boxes_y2], axis=2)
+
+		return pred_boxes
 
 """
 Anchor functions from the Retina-net library
@@ -645,6 +736,7 @@ def anchor_targets_bbox(
 
 	if annotations.shape[0]:
 		# obtain indices of gt annotations with the greatest overlap
+
 		overlaps             = compute_overlap(anchors, annotations[:, :4])
 		argmax_overlaps_inds = np.argmax(overlaps, axis=1)
 		max_overlaps         = overlaps[np.arange(overlaps.shape[0]), argmax_overlaps_inds]
@@ -849,8 +941,10 @@ class PriorProbability(keras.initializers.Initializer):
 			'probability': self.probability
 		}
 
-	def __call__(self, shape, dtype=None):
+	def __call__(self, shape, dtype=None, partition_info=None):
 		# set bias to -log((1 - p)/p) for foregound
+		# dtype = K.floatx()
+		dtype = K.floatx()
 		result = np.ones(shape, dtype=dtype) * -math.log((1 - self.probability) / self.probability)
 
 		return result
@@ -947,26 +1041,3 @@ def smooth_l1(sigma=3.0):
 		return regression_loss
 
 	return _smooth_l1
-
-"""
-Initializers from Retina-net library
-"""
-
-class PriorProbability(initializers.Initializer):
-	"""
-	Initializer applies a prior probability.
-	"""
-
-	def __init__(self, probability=0.01):
-		self.probability = probability
-
-	def get_config(self):
-		return {
-			'probability': self.probability
-		}
-
-	def __call__(self, shape, dtype=None):
-		# set bias to -log((1 - p)/p) for foregound
-		result = np.ones(shape, dtype=dtype) * -math.log((1 - self.probability) / self.probability)
-
-		return result

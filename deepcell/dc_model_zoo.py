@@ -8,15 +8,15 @@ Assortment of CNN architectures for single cell segmentation
 
 import numpy as np
 import tensorflow as tf
-import keras_resnet
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import Sequential, Model
-from tensorflow.python.keras.layers import Add, Conv2D, MaxPool2D, AvgPool2D, Conv3D, Activation, Lambda, Flatten, Dense, BatchNormalization, Permute, Input, Concatenate
+from tensorflow.python.keras.layers import Reshape, Add, Conv2D, MaxPool2D, AvgPool2D, Conv3D, Activation, Lambda, Flatten, Dense, BatchNormalization, Permute, Input, Concatenate
 from tensorflow.python.keras.regularizers import l2
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.activations import softmax
 from tensorflow.python.keras import initializers
-from deepcell import dilated_MaxPool2D, TensorProd2D, TensorProd3D, Resize, axis_softmax, Location, Location3D
+from dc_custom_layers import *
+from dc_resnet_functions import *
 
 """
 Batch normalized conv-nets
@@ -1356,22 +1356,22 @@ def default_classification_model(
 		'padding'     : 'same',
 	}
 
-	inputs  = Input(shape=(None, None, pyramid_feature_size))
+	inputs  = Input(shape=(pyramid_feature_size, 64, 64))
 	outputs = inputs
 	for i in range(4):
 		outputs = Conv2D(
 			filters=classification_feature_size,
 			activation='relu',
 			name='pyramid_classification_{}'.format(i),
-			kernel_initializer=initializers.normal(mean=0.0, stddev=0.01, seed=None),
+			kernel_initializer=initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None),
 			bias_initializer='zeros',
 			**options
 		)(outputs)
 
 	outputs = Conv2D(
 		filters=num_classes * num_anchors,
-		kernel_initializer=initializers.zeros(),
-		bias_initializer=initializers.PriorProbability(probability=prior_probability),
+		kernel_initializer=initializers.Zeros(),
+		bias_initializer=PriorProbability(probability=prior_probability),
 		name='pyramid_classification',
 		**options
 	)(outputs)
@@ -1391,11 +1391,11 @@ def default_regression_model(num_anchors, pyramid_feature_size=256, regression_f
 		'kernel_size'        : 3,
 		'strides'            : 1,
 		'padding'            : 'same',
-		'kernel_initializer' : keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
+		'kernel_initializer' : initializers.RandomNormal(mean=0.0, stddev=0.01, seed=None),
 		'bias_initializer'   : 'zeros'
 	}
 
-	inputs  = Input(shape=(None, None, pyramid_feature_size))
+	inputs  = Input(shape=(pyramid_feature_size, 64, 64))
 	outputs = inputs
 	for i in range(4):
 		outputs = Conv2D(
@@ -1451,8 +1451,8 @@ class AnchorParameters:
 AnchorParameters.default = AnchorParameters(
 	sizes   = [32, 64, 128, 256, 512],
 	strides = [8, 16, 32, 64, 128],
-	ratios  = np.array([0.5, 1, 2], keras.backend.floatx()),
-	scales  = np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)], keras.backend.floatx()),
+	ratios  = np.array([0.5, 1, 2], K.floatx()),
+	scales  = np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)], K.floatx()),
 )
 
 
@@ -1474,7 +1474,7 @@ def __build_pyramid(models, features):
 def __build_anchors(anchor_parameters, features):
 	anchors = []
 	for i, f in enumerate(features):
-		anchors.append(layers.Anchors(
+		anchors.append(Anchors(
 			size=anchor_parameters.sizes[i],
 			stride=anchor_parameters.strides[i],
 			ratios=anchor_parameters.ratios,
@@ -1493,13 +1493,14 @@ def retinanet(
 	submodels               = None,
 	name                    = 'retinanet'
 ):
-	if submodels is None:
-		submodels = default_submodels(num_classes, anchor_parameters)
 
 	_, C3, C4, C5 = backbone.outputs  # we ignore C2
 
 	# compute pyramid features as per https://arxiv.org/abs/1708.02002
 	features = create_pyramid_features(C3, C4, C5)
+
+	if submodels is None:
+		submodels = default_submodels(num_classes, anchor_parameters)
 
 	# for all pyramid levels, run available submodels
 	pyramid = __build_pyramid(submodels, features)
@@ -1526,4 +1527,37 @@ def retinanet_bbox(inputs, num_classes, nms=True, name='retinanet-bbox', *args, 
 
 	# construct the model
 	return Model(inputs=inputs, outputs=model.outputs[1:] + [detections], name=name)
+
+
+allowed_backbones = ['resnet50', 'resnet101', 'resnet152']
+
+def validate_backbone(backbone):
+	if backbone not in allowed_backbones:
+		raise ValueError('Backbone (\'{}\') not in allowed backbones ({}).'.format(backbone, allowed_backbones))
+
+def resnet_retinanet(num_classes, input_shape = (1, 512, 512), backbone='resnet50', inputs=None, **kwargs):
+	validate_backbone(backbone)
+
+	# choose default input
+	if inputs is None:
+		inputs = Input(shape = input_shape)
+
+	# create the resnet backbone
+	if backbone == 'resnet50':
+		resnet = ResNet50(inputs, include_top=False, freeze_bn=True)
+	elif backbone == 'resnet101':
+		resnet = ResNet101(inputs, include_top=False, freeze_bn=True)
+	elif backbone == 'resnet152':
+		resnet = ResNet152(inputs, include_top=False, freeze_bn=True)
+
+	# create the full model
+	model = retinanet(inputs=inputs, num_classes=num_classes, backbone=resnet, **kwargs)
+
+	return model
+
+def resnet50_retinanet(num_classes, input_shape = (1, 512, 512), inputs=None, weights='imagenet', **kwargs):
+	return resnet_retinanet(input_shape = input_shape, num_classes=num_classes, backbone='resnet50', inputs=inputs, **kwargs)
+
+
+
 

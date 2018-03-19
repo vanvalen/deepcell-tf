@@ -1153,6 +1153,15 @@ class MovieArrayIterator(Iterator):
 Bounding box generators adapted from retina net library
 """
 
+class BoundingBoxGenerator(ImageFullyConvDataGenerator):
+	def flow(self, train_dict, batch_size=1, shuffle=True, seed=None,
+			save_to_dir=None, save_prefix='', save_format='png'):
+		return BoundingBoxIterator(
+			train_dict, self,
+			batch_size=batch_size, shuffle=shuffle, seed=seed,
+			data_format=self.data_format,
+			save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
+
 class BoundingBoxIterator(Iterator):
 	def __init__(self, train_dict, image_data_generator,
 				 batch_size=1, shuffle=False, seed=None,
@@ -1175,25 +1184,25 @@ class BoundingBoxIterator(Iterator):
 		self.channels_axis = channels_axis
 		self.y = train_dict["labels"]
 
-		if self.channel_axis == 3:
+		if self.channels_axis == 3:
 			self.num_features = self.y.shape[-1]
 		else:
 			self.num_features = self.y.shape[1]
 
-		if self.channel_axis == 3:
+		if self.channels_axis == 3:
 			self.image_shape = self.x.shape[1:2]
 		else:
 			self.image_shape = self.x.shape[2:]
 
 		bbox_list = []
-		for b in xrange(channels.shape[0]):
+		for b in xrange(self.x.shape[0]):
 			for l in xrange(1,self.num_features-1):
-				if self.channel_axis == 3:
+				if self.channels_axis == 3:
 					mask = self.y[b,:,:,l]
 				else:
 					mask = self.y[b,l,:,:]
 				props = regionprops(label(mask))
-				bboxes = [np.array(list(prop.bbox) + list(l)) for prop in props]
+				bboxes = [np.array(list(prop.bbox) + [l-1]) for prop in props]
 				bboxes = np.concatenate(bboxes, axis = 0)
 			bbox_list += [bboxes]
 		self.bbox_list = bbox_list
@@ -1203,16 +1212,22 @@ class BoundingBoxIterator(Iterator):
 		self.save_to_dir = save_to_dir
 		self.save_prefix = save_prefix
 		self.save_format = save_format
-		super(ImageFullyConvIterator, self).__init__(self.x.shape[0], batch_size, shuffle, seed)
+		super(BoundingBoxIterator, self).__init__(self.x.shape[0], batch_size, shuffle, seed)
 
-	def get_annotations(y):
+	def get_annotations(self, y):
 		for l in xrange(1,self.num_features-1):
-			if self.channel_axis == 3:
-				mask = self.y[:,:,l]
+			if self.channels_axis == 3:
+				mask = y[:,:,l]
 			else:
-				mask = self.y[l,:,:]
+				mask = y[l,:,:]
+
 			props = regionprops(label(mask))
-			bboxes = [np.array(list(prop.bbox) + list(l)) for prop in props]
+			bboxes = []
+			for prop in props:
+				bb = np.array(list(prop.bbox) + [l-1])
+				bb = bb[np.newaxis,:]
+				bboxes += [bb]
+				
 			bboxes = np.concatenate(bboxes, axis = 0)
 		return bboxes
 
@@ -1228,12 +1243,12 @@ class BoundingBoxIterator(Iterator):
 		return anchor_targets_bbox(image_shape, annotations, num_classes, mask_shape, negative_overlap, positive_overlap, **kwargs)
 
 	def compute_target(self, annotation):
-		labels, annotations, anchors = self.anchor_targets(self.image_shape, annotation, self.num_features)
-		regression = bbox_transform(anchors, annotation)
+		labels, annotations, anchors = self.anchor_targets(self.image_shape, annotation, self.num_features-2)
+		regressions = bbox_transform(anchors, annotations)
 
 		# append anchor state to regression targets
 		anchor_states = np.max(labels, axis = 1, keepdims = True)
-		regression = np.append(regression, anchor_states, axis = 1)
+		regressions = np.append(regressions, anchor_states, axis = 1)
 
 		return [regressions, labels]
 
@@ -1273,7 +1288,7 @@ class BoundingBoxIterator(Iterator):
 
 				# Get the bounding boxes from the transformed masks!
 
-				annotations = self.get_annotations[y]
+				annotations = self.get_annotations(y)
 				regressions, labels = self.compute_target(annotations)
 				regressions_list += [regressions]
 				labels_list += [labels]
@@ -1298,7 +1313,7 @@ class BoundingBoxIterator(Iterator):
 			return batch_x
 		else:
 			batch_y = np.rollaxis(batch_y, 1, 4)
-			return batch_x, [regressions_list, labels_list]
+			return batch_x, [regressions, labels]
 
 	def next(self):
 		"""For python 2.x.

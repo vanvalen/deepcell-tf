@@ -526,7 +526,7 @@ class Anchors(Layer):
 			self.scales  = np.array(scales)
 
 		self.num_anchors = len(ratios) * len(scales)
-		self.anchors     = K.variable(utils_anchors.generate_anchors(
+		self.anchors     = K.variable(generate_anchors(
 			base_size=size,
 			ratios=ratios,
 			scales=scales,
@@ -542,7 +542,7 @@ class Anchors(Layer):
 
 		# generate proposals from bbox deltas and shifted anchors
 		anchors = backend.shift(features_shape[1:3], self.stride, self.anchors)
-		anchors = K.tile(K.expand_dims(anchors, axis=0), (features_shape[0], 1, 1))
+		anchors = tf.tile(K.expand_dims(anchors, axis=0), (features_shape[0], 1, 1))
 
 		return anchors
 
@@ -616,10 +616,15 @@ class UpsampleLike(Layer):
 
 		source, target = inputs
 		target_shape = K.shape(target)
-		return backend.resize_images(source, (target_shape[1], target_shape[2]))
+
+		# hack to deal with channels being first
+		permuted = K.permute_dimensions(source, [0, 2, 3, 1])
+		resized = backend.resize_images(permuted, (target_shape[2], target_shape[3]))
+		output = K.permute_dimensions(resized, [0, 3, 1, 2])
+		return output
 
 	def compute_output_shape(self, input_shape):
-		return (input_shape[0][0],) + input_shape[1][1:3] + (input_shape[0][-1],)
+		return (input_shape[0][0:1],) + input_shape[1][2:] 
 
 
 class RegressBoxes(Layer):

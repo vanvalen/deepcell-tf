@@ -35,3 +35,5 @@ subprocess32==3.2.7
 tifffile==0.12.1
 urllib3==1.22
 Werkzeug==0.12.2
+keras-resnet==0.1.0
+keras-rl==0.4.0
