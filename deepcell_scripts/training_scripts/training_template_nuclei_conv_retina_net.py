@@ -25,14 +25,14 @@ n_epoch = 200
 
 dataset = "nuclei_conv_61x61"
 expt = "retina_net"
-
+# 
 direc_save = "/data/trained_networks/nuclei/"
-direc_data = "/data/training_data_npz/nuclei/"
+direc_data= "/data/training_data_npz/nuclei/"
 
 optimizer = Adam(lr=1e-5, clipnorm=0.001)
-# optimizer = SGD(lr = 0.001, momentum = 0.9, nesterov = True)
-lr_sched = rate_scheduler(lr = 1e-5, decay = 0.999)
-
+# optimizer = SGD(lr = 0.01, momentum = 0.9, nesterov = True)
+lr_sched = rate_scheduler(lr = 1e-5, decay = 0.99)
+# 
 file_name = os.path.join(direc_data, dataset + ".npz")
 training_data = np.load(file_name)
 
@@ -43,7 +43,7 @@ for iterate in xrange(1):
 	trained_model = train_model(model = model, dataset = dataset, optimizer = optimizer, 
 		expt = expt, it = iterate, batch_size = batch_size, n_epoch = n_epoch,
 		direc_save = direc_save, direc_data = direc_data, 
-		lr_sched = lr_sched, rotation_range = 180, flip = True, shear = False)
+		lr_sched = lr_sched, rotation_range = 0, flip = False, shear = False)
 
 
 

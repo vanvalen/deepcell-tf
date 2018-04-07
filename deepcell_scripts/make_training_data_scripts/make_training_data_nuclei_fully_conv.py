@@ -63,7 +63,7 @@ make_training_data(max_training_examples = max_training_examples, window_size_x 
 		reshape_size = 512,
 		display = False,
 		max_plotted = 5,
-		process_std = True,
+		process_std = False,
 		verbose = True)
 
 

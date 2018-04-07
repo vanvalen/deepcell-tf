@@ -1155,17 +1155,17 @@ Bounding box generators adapted from retina net library
 
 class BoundingBoxGenerator(ImageFullyConvDataGenerator):
 	def flow(self, train_dict, batch_size=1, shuffle=True, seed=None,
-			save_to_dir=None, save_prefix='', save_format='png'):
+			save_to_dir=None, return_image = False, save_prefix='', save_format='png'):
 		return BoundingBoxIterator(
 			train_dict, self,
 			batch_size=batch_size, shuffle=shuffle, seed=seed,
-			data_format=self.data_format,
+			data_format=self.data_format, return_image = return_image,
 			save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
 
 class BoundingBoxIterator(Iterator):
 	def __init__(self, train_dict, image_data_generator,
 				 batch_size=1, shuffle=False, seed=None,
-				 data_format = None,
+				 data_format = None, return_image = False,
 				 save_to_dir=None, save_prefix='', save_format='png'):
 		print train_dict.keys()
 		self.x = np.asarray(train_dict["channels"], dtype = K.floatx())
@@ -1193,7 +1193,7 @@ class BoundingBoxIterator(Iterator):
 			self.image_shape = self.x.shape[1:2]
 		else:
 			self.image_shape = self.x.shape[2:]
-
+		self.return_image = return_image
 		bbox_list = []
 		for b in xrange(self.x.shape[0]):
 			for l in xrange(1,self.num_features-1):
@@ -1224,7 +1224,9 @@ class BoundingBoxIterator(Iterator):
 			props = regionprops(label(mask))
 			bboxes = []
 			for prop in props:
-				bb = np.array(list(prop.bbox) + [l-1])
+				bbox = prop.bbox
+				bbox_reorder = [bbox[1], bbox[0], bbox[3], bbox[2]]
+				bb = np.array(bbox_reorder + [l-1])
 				bb = bb[np.newaxis,:]
 				bboxes += [bb]
 				
@@ -1313,7 +1315,10 @@ class BoundingBoxIterator(Iterator):
 			return batch_x
 		else:
 			batch_y = np.rollaxis(batch_y, 1, 4)
-			return batch_x, [regressions, labels]
+			if self.return_image is False:
+				return batch_x, [regressions, labels]
+			elif self.return_image is True:
+				return batch_x, [batch_y, regressions, labels]
 
 	def next(self):
 		"""For python 2.x.
