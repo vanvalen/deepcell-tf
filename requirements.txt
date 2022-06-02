@@ -9,7 +9,7 @@ funcsigs==1.0.2
 functools32==3.2.3.post2
 gi==1.2
 h5py==2.7.0
-html5lib==0.9999999
+html5lib==0.99999999
 idna==2.6
 Markdown==2.6.8
 matplotlib==2.1.0
